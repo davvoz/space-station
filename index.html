@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>Space Station Manager</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            background: #000;
+            font-family: Arial, sans-serif;
+            color: #fff;
+        }
+
+        #gameCanvas {
+            display: block;
+            width: 100vw;
+            height: 100vh;
+        }
+    </style>
+</head>
+
+<body>
+    <canvas id="gameCanvas" width="800" height="600"></canvas>
+    <audio id="shootSound" preload="auto">
+        <source src="./assets/laser.wav" type="audio/wav">
+    </audio>
+    <audio id="explosionSound" preload="auto">
+        <source src="./assets/explosion.wav" type="audio/wav">
+    </audio>
+    <!-- Add new audio elements -->
+    <audio id="coinEarnSound" preload="auto">
+        <source src="./assets/coinup.wav" type="audio/wav">
+    </audio>
+    <audio id="coinSpendSound" preload="auto">
+        <source src="./assets/coindown.wav" type="audio/wav">
+    </audio>
+    <audio id="background" preload="auto" loop>
+        <source src="./assets/background_L1.mp3" type="audio/mpeg">
+    </audio>
+    <audio id="failSound" preload="auto">
+        <source src="./assets/fail.wav" type="audio/wav">
+    </audio>
+
+    <script src="./src/game/Game.js" type="module"></script>
+
+</body>
+
+</html>
