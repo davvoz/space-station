@@ -87,17 +87,10 @@ class Game {
             fail: document.getElementById('failSound')
         };
 
+        // Simplified sound initialization
         Object.values(sounds).forEach(sound => {
             if (sound) {
-                sound.volume = GAME_CONFIG.SOUND_VOLUME;
-                if (sound.id === 'background') {
-                    sound.volume = 0.3; // Volume specifico per la musica di background
-                    sound.loop = true;
-                }
-                sound.addEventListener('error', this.handleSoundError);
-                sound.addEventListener('loadeddata', () => {
-                    console.log(`Sound ${sound.id} loaded successfully`);
-                });
+                sound.volume = sound.id === 'background' ? 0.3 : GAME_CONFIG.SOUND_VOLUME;
             }
         });
 
@@ -652,18 +645,19 @@ class Game {
     }
 
     playBackgroundMusic() {
-        if (!this.sounds.background) return;
-    
-        const playPromise = this.sounds.background.play();
-        if (playPromise !== undefined) {
-            playPromise.catch(error => {
-                console.warn('Auto-play was prevented:', error);
-                // Aggiungere logica di recovery
-                const startAudio = () => {
-                    // ...existing code...
-                };
-            });
-        }
+        const bgMusic = this.sounds.background;
+        if (!bgMusic) return;
+
+        // Set loop property to true
+        bgMusic.loop = true;
+
+        // Simple click handler to start music
+        const startMusic = () => {
+            bgMusic.play().catch(e => console.warn('Background music autoplay prevented:', e));
+            document.removeEventListener('click', startMusic);
+        };
+
+        document.addEventListener('click', startMusic);
     }
 
     roundRect(x, y, width, height, radius) {
