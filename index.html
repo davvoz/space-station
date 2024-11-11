@@ -18,10 +18,40 @@
             width: 100vw;
             height: 100vh;
         }
+        #autoFireToggle {
+            position: fixed;
+            top: 53%;  /* Changed to center vertically */
+            right: 20px;
+            transform: translateY(-50%);  /* Center perfectly */
+            margin-top: 0px;  /* Changed from -30px to 0px to move it down */
+            padding: 10px 20px;
+            background: rgba(0, 100, 200, 0.6);
+            border: 2px solid #44aaff;
+            color: white;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            transition: all 0.3s;
+            opacity: 1;
+        }
+        #autoFireToggle.active {
+            background: rgba(200, 50, 50, 0.8);
+            border-color: #ff4444;
+        }
+        #autoFireToggle:not(.active):hover {
+            background: rgba(0, 150, 255, 0.6);
+        }
+        #autoFireToggle:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
     </style>
 </head>
 
 <body>
+    <script>
+        window.mousePressed = false;
+    </script>
     <canvas id="gameCanvas" width="800" height="600"></canvas>
     <audio id="shootSound" preload="auto">
         <source src="./assets/laser.wav" type="audio/wav">
@@ -42,7 +72,10 @@
     <audio id="failSound" preload="auto">
         <source src="./assets/fail.wav" type="audio/wav">
     </audio>
-
+    <audio id="novaSound" preload="auto">
+        <source src="./assets/nova.wav" type="audio/wav">
+    </audio>
+    <button id="autoFireToggle">Auto Fire: OFF</button>
     <script src="./src/game/Game.js" type="module"></script>
 
 </body>

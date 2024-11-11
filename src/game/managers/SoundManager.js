@@ -15,7 +15,8 @@ export class SoundManager {
             combo: document.getElementById('comboSound'),
             bossMusic: document.getElementById('bossMusic'),
             background: document.getElementById('background'),
-            fail: document.getElementById('failSound')
+            fail: document.getElementById('failSound'),
+            nova: document.getElementById('novaSound')
         };
 
         Object.values(sounds).forEach(sound => {

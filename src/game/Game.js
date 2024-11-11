@@ -56,6 +56,13 @@ class Game {
 
         this.paused = false; // Add pause state
         window.game = this; // Make game instance globally available
+
+        this.lastAutoShot = 0;
+        this.mouseX = 0;
+        this.mouseY = 0;
+
+        this.autoFireEnabled = false;
+        this.setupAutoFireToggle();
     }
 
     initializeCanvas() {
@@ -101,6 +108,25 @@ class Game {
         window.addEventListener('keyup', (e) => {
             window.keysPressed[e.code] = false;
         });
+
+        // Mantieni solo il mousemove per tracciare la posizione del mouse
+        this.canvas.addEventListener('mousemove', (event) => {
+            const rect = this.canvas.getBoundingClientRect();
+            this.mouseX = event.clientX - rect.left;
+            this.mouseY = event.clientY - rect.top;
+        });
+
+        // Add Enter key handler for auto-fire
+        window.addEventListener('keydown', (e) => {
+            if (e.code === 'Enter') {
+                if (this.station.activateAutoFire(this.waveNumber)) {
+                    const toggleBtn = document.getElementById('autoFireToggle');
+                    if (toggleBtn) {
+                        toggleBtn.classList.add('active');
+                    }
+                }
+            }
+        });
     }
 
     handleClick(event) {
@@ -118,7 +144,6 @@ class Game {
 
         this.fireProjectiles(targetX, targetY);
     }
-
 
     isPointInButton(x, y, buttonX, buttonY, buttonSize) {
         return x >= buttonX && x <= buttonX + buttonSize &&
@@ -157,7 +182,8 @@ class Game {
                     this.station.y,
                     "NOVA BLAST!",
                     'super'
-                ));
+                 ));
+                this.soundManager.play('nova'); // Add this line to play nova sound
             }
         }
         if (event.key === 'Control') {
@@ -296,6 +322,27 @@ class Game {
         if (this.currentWave && this.currentWave.isComplete && !this.currentWave.rewardGiven) {
             this.handleWaveCompletion();
             this.currentWave.rewardGiven = true;
+        }
+
+        // Sostituisci la vecchia logica di auto-fire con questa
+        if (this.autoFireEnabled) {
+            const currentTime = Date.now();
+            if (currentTime - this.lastAutoShot >= 1000 / this.station.fireRate) {
+                this.fireProjectiles(this.mouseX, this.mouseY);
+                this.soundManager.play('shoot'); // Aggiungi questa linea
+                this.lastAutoShot = currentTime;
+            }
+        }
+        
+        // Update station auto-fire
+        this.station.updateAutoFire(this.waveNumber);
+        this.autoFireEnabled = this.station.autoFireActive;
+        
+        // Update auto-fire toggle button
+        const toggleBtn = document.getElementById('autoFireToggle');
+        if (toggleBtn) {
+            toggleBtn.textContent = `Auto Fire: ${this.autoFireEnabled ? 'ON' : 'OFF'}`;
+            toggleBtn.classList.toggle('active', this.autoFireEnabled);
         }
     }
 
@@ -466,6 +513,11 @@ class Game {
         if (this.currentWave) {
             this.currentWave.onEnemyDefeated();
         }
+        
+        // Add kill count for auto-fire charge
+        if (!isCollision) {
+            this.station.addKill();
+        }
     }
 
     handleProjectileHit(enemy) {
@@ -567,7 +619,49 @@ class Game {
                 text.draw(this.ctx);
             }
         });
+        
+        // Draw auto-fire UI
+        if (this.station) {
+            // Draw kills progress bar
+            const barX = this.width - 180;
+            const barY = this.height / 2 - 30;
+            const barWidth = 150;
+            const barHeight = 20;
 
+            // Background
+            this.ctx.fillStyle = '#304060';
+            this.ctx.fillRect(barX, barY, barWidth, barHeight);
+
+            // Progress
+            this.ctx.fillStyle = this.station.autoFireActive ? '#ff4444' : '#44ff44';
+            this.ctx.fillRect(barX, barY, 
+                (this.station.autoFireKills / this.station.autoFireKillsRequired) * barWidth, 
+                barHeight);
+
+            // Text
+            this.ctx.fillStyle = '#ffffff';
+            this.ctx.font = '14px Arial';
+            this.ctx.fillText(
+                `Auto-Fire Kills: ${this.station.autoFireKills}/${this.station.autoFireKillsRequired}`, 
+                barX  + 70  , barY - 5);
+
+            // Duration bar when active
+            if (this.station.autoFireActive) {
+                const durationX = barX;
+                const durationY = barY + 30;
+                
+                this.ctx.fillStyle = '#304060';
+                this.ctx.fillRect(durationX, durationY, barWidth, barHeight);
+                
+                this.ctx.fillStyle = '#ff4444';
+                this.ctx.fillRect(durationX, durationY, 
+                    (this.station.autoFireDuration / this.station.autoFireMaxDuration) * barWidth, 
+                    barHeight);
+                
+                this.ctx.fillStyle = '#ffffff';
+                this.ctx.fillText('Duration', durationX, durationY - 5);
+            }
+        }
     }
 
     spawnEnemy() {
@@ -730,13 +824,21 @@ class Game {
                 this.explosions.push(new Explosion(exp.x, exp.y, exp.color, 2));
                 
                 // Apply effects to enemies
-                this.enemies.forEach(enemy => {
+                this.enemies = this.enemies.filter(enemy => {
                     const dx = enemy.x - exp.x;
                     const dy = enemy.y - exp.y;
                     const distance = Math.sqrt(dx * dx + dy * dy);
                     
                     if (distance < 150) {
-                        enemy.health -= exp.damage * (1 - distance / 150);
+                        // Calcola il danno in base alla distanza
+                        const damage = exp.damage * (1 - distance / 150);
+                        enemy.health -= damage;
+                        
+                        // Se il nemico muore per il danno dell'abilità
+                        if (enemy.health <= 0) {
+                            this.handleEnemyDeath(enemy, false);
+                            return false; // Rimuove il nemico dalla lista
+                        }
                         
                         if (exp.pullForce) {
                             const angle = Math.atan2(this.station.y - enemy.y, this.station.x - enemy.x);
@@ -744,9 +846,24 @@ class Game {
                             enemy.y += Math.sin(angle) * exp.pullForce;
                         }
                     }
+                    return true; // Mantiene il nemico nella lista
                 });
             }, exp.delay);
         });
+    }
+
+    setupAutoFireToggle() {
+        const toggleBtn = document.getElementById('autoFireToggle');
+        toggleBtn.addEventListener('click', () => {
+            if (this.station.activateAutoFire(this.waveNumber)) {
+                toggleBtn.classList.add('active');
+            }
+        });
+
+        // Update button state in game loop
+        this.autoFireEnabled = this.station.autoFireActive;
+        toggleBtn.textContent = `Auto Fire: ${this.autoFireEnabled ? 'ON' : 'OFF'}`;
+        toggleBtn.classList.toggle('active', this.autoFireEnabled);
     }
 }
 window.onload = () => new Game();

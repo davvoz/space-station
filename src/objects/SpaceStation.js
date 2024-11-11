@@ -28,13 +28,13 @@ export class SpaceStation extends GameObject {
 
         // New properties for abilities
         this.autoFireActive = false;
+        this.autoFireKills = 0;           // Current kill count
+        this.autoFireKillsRequired = 10;  // Kills needed to activate
         this.autoFireDuration = 0;
-        this.autoFireMaxDuration = 15000; // 15 secondi
-        this.autoFireTimer = 0;
-        this.autoFireRate = 5;
-        this.autoFireCooldown = 0;
-        this.autoFireCooldownTime = 10000; // 10 secondi
-        this.autoFireCharge = 0; // Aggiungi questa proprietà
+        this.autoFireMaxDuration = 0;
+        this.autoFireCharge = 0;
+        this.autoFireMaxCharge = 10;   // Requires 10 kills to charge
+        this.killCount = 0;
 
         // Replace super ability properties with twin system
         this.abilityCharge = 100; // Start fully charged
@@ -173,6 +173,15 @@ export class SpaceStation extends GameObject {
         }
 
         this.lastUpdate = currentTime;
+    }
+
+    updateAutoFire(waveNumber) {
+        if (this.autoFireActive) {
+            this.autoFireDuration = Math.max(0, this.autoFireDuration - 16.67);
+            if (this.autoFireDuration <= 0) {
+                this.autoFireActive = false;
+            }
+        }
     }
 
     getKeys() {
@@ -494,5 +503,22 @@ export class SpaceStation extends GameObject {
 
         // Applica l'effetto
         effect(this);
+    }
+
+    addKill() {
+        if (!this.autoFireActive) {
+            this.autoFireKills = Math.min(this.autoFireKillsRequired, this.autoFireKills + 1);
+        }
+    }
+
+    activateAutoFire(waveNumber) {
+        if (this.autoFireKills >= this.autoFireKillsRequired && !this.autoFireActive) {
+            this.autoFireActive = true;
+            this.autoFireDuration = waveNumber * 5000; // 5 seconds per wave
+            this.autoFireMaxDuration = this.autoFireDuration;
+            this.autoFireKills = 0; // Reset kills after activation
+            return true;
+        }
+        return false;
     }
 }
