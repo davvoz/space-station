@@ -1,89 +1,6 @@
-import { GAME_CONFIG } from '../config/GameConfig.js';
 
-class ColorUtils {
-    static createGradient(ctx, x, y, width, height, colors) {
-        const gradient = ctx.createLinearGradient(x, y, x + width, y);
-        gradient.addColorStop(0, colors[0]);
-        gradient.addColorStop(1, colors[1]);
-        return gradient;
-    }
-}
-
-class TextUtils {
-    static drawText(ctx, text, x, y, font, color, align = 'left', baseline = 'middle') {
-        ctx.font = font;
-        ctx.fillStyle = color;
-        ctx.textAlign = align;
-        ctx.textBaseline = baseline;
-        ctx.fillText(text, x, y);
-    }
-}
-
-class ShapeUtils {
-    static roundRect(ctx, x, y, width, height, radius) {
-        ctx.beginPath();
-        ctx.moveTo(x + radius, y);
-        ctx.arcTo(x + width, y, x + width, y + height, radius);
-        ctx.arcTo(x + width, y + height, x, y + height, radius);
-        ctx.arcTo(x, y + height, x, y + height, radius);
-        ctx.arcTo(x, y, x + width, y, radius);
-        ctx.closePath();
-    }
-}
-
-class ResourceBar {
-    constructor(ctx, x, y, width, height, colors) {
-        this.ctx = ctx;
-        this.x = x;
-        this.y = y;
-        this.width = width;
-        this.height = height;
-        this.colors = colors;
-    }
-
-    draw(label, value, text, icon = '') {
-        value = Math.max(0, Math.min(1, value));
-        this.drawBackground();
-        this.drawForeground(value);
-        this.drawIcon(icon, value);
-        this.drawText(text, icon);
-    }
-
-    drawBackground() {
-        this.ctx.fillStyle = GAME_CONFIG.UI_CONFIG.COLORS.BACKGROUND;
-        ShapeUtils.roundRect(this.ctx, this.x, this.y, this.width, this.height, this.height / 2);
-        this.ctx.fill();
-    }
-
-    drawForeground(value) {
-        if (value > 0) {
-            try {
-                this.ctx.fillStyle = ColorUtils.createGradient(this.ctx, this.x, this.y, this.width, this.height, this.colors);
-                ShapeUtils.roundRect(this.ctx, this.x, this.y, this.width * value, this.height, this.height / 2);
-                this.ctx.fill();
-            } catch (error) {
-                console.error('Error creating gradient:', error);
-                this.ctx.fillStyle = this.colors[0];
-                this.ctx.fillRect(this.x, this.y, this.width * value, this.height);
-            }
-        }
-    }
-
-    drawIcon(icon, value) {
-        if (icon) {
-            const iconSize = value === 1 ? this.height * 1.5 : this.height;
-            const iconColor = value === 1 ? this.colors[1] : '#fff';
-            TextUtils.drawText(this.ctx, icon, this.x + this.width / 2, this.y + this.height / 2, `${iconSize}px Arial`, iconColor, 'center', 'middle');
-        }
-    }
-
-    drawText(text, icon) {
-        if (text) {
-            const displayText = icon ? `${icon} ${text}` : text;
-            TextUtils.drawText(this.ctx, displayText, this.x + this.width + 10, this.y + this.height - 2, GAME_CONFIG.UI_CONFIG.FONTS.SMALL, GAME_CONFIG.UI_CONFIG.COLORS.WHITE);
-        }
-    }
-}
+import { TextUtils } from '../utils/TextUtils.js';
+import { ResourceBar } from '../ui/components/ResourceBar.js';
 
 class GameStats {
     constructor(ctx, width) {
@@ -101,7 +18,7 @@ class GameStats {
     drawStatsBackground() {
         // Background panel più grande e trasparente
         this.ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
-        this.ctx.roundRect(10, 10, 300, 120, 15);
+        this.ctx.roundRect(10, 10, 300, 150, 15);
         this.ctx.fill();
     }
 
@@ -134,7 +51,7 @@ class GameStats {
         };
 
         // Position stats in the top-left corner with proper padding
-        const baseX = 80;
+        const baseX = 80 + 10;
         const baseY = 60;
         const spacing = 50;
         
@@ -178,7 +95,7 @@ class GameStats {
         this.ctx.shadowBlur = 3;
         
         stats.forEach((stat, index) => {
-            this.ctx.fillText(stat, 150, 200 + (index * 25)); // Spostato a sinistra
+            this.ctx.fillText(stat, 250,50+ (index * 25)); // Spostato a sinistra
         }); 
         
         this.ctx.shadowBlur = 0;
@@ -214,9 +131,10 @@ class UpgradeBars {
 
         displayedUpgrades.forEach(([name, upgrade], index) => {
             const y = startY + (spacing * displayIndex);
-            const progress = Math.min(1, gameState.credits / upgrade.cost);
-            const canAfford = gameState.credits >= upgrade.cost;
-
+            const currentCost = upgradeManager.getUpgradeCost(name);
+            const progress = Math.min(1, gameState.credits / currentCost);
+            const canAfford = gameState.credits >= currentCost;
+            
             const resourceBar = new ResourceBar(
                 this.ctx,
                 startX,
@@ -226,10 +144,22 @@ class UpgradeBars {
                 canAfford ? this.upgradeColors[displayIndex % this.upgradeColors.length] : ['#666', '#444']
             );
 
+            // Modifica il testo per mostrare il moltiplicatore per l'health
+            let displayText;
+            if (name === 'Health') {
+                const waveNumber = window.game?.waveNumber || 1;
+                const waveMultiplier = Math.max(1, waveNumber * 0.2).toFixed(1);
+                displayText = `[${index + 1}] ${name} (${currentCost}💰) x${waveMultiplier}`;
+            } else if (name === 'Turret') {
+                displayText = `[${index + 1}] ${name} (${currentCost}💰) ${upgradeManager.upgradeCounts[name]}/10`;
+            } else {
+                displayText = `[${index + 1}] ${name} (${currentCost}💰)`;
+            }
+
             resourceBar.draw(
                 name,
                 progress,
-                `[${index + 1}] ${name} (${upgrade.cost}💰)`,
+                displayText,
                 icons[name]
             );
 
@@ -243,7 +173,7 @@ class UpgradeBars {
     drawUpgradeCount(upgradeManager, name, startX, y, barHeight) {
         const count = upgradeManager.upgradeCounts[name];
         if (count > 0) {
-            TextUtils.drawText(this.ctx, `x${count}`, startX - 5, y + barHeight - 2, 'bold 14px Arial', '#fff', 'right');
+            TextUtils.drawText(this.ctx, `x${count}`, startX - 50, y + barHeight - 2, 'bold 14px Arial', '#fff', 'right');
         }
     }
 
@@ -258,33 +188,34 @@ class AbilityButtons {
     }
 
     draw(station, startX, startY, size, spacing) {
+        // Nova ability (expanding)
         this.drawAbilityButton(
             startX,
             startY,
             size,
-            '🔫',
-            station.autoFireActive,
-            1 - station.getAutoFireProgress(),
-            'Auto-Fire [7]',
-            '#FF4444',
-            '#AA0000',
+            '🌟',
+            station.novaActive,
+            station.getAbilityProgress(),
+            'Nova [7]',
+            '#44AAFF',
+            '#0044AA',
             '7',
-            station.autoFireCooldown > 0
+            station.abilityCooldown > 0
         );
 
-        const superCharge = station.getChargeProgress();
+        // Vortex ability (contracting)
         this.drawAbilityButton(
             startX + size + spacing,
             startY,
             size,
-            '💫',
-            station.superAbilityActive,
-            superCharge,
-            'Super Nova [8]',
-            '#44AAFF',
-            '#0044AA',
+            '🌀',
+            station.vortexActive,
+            station.getAbilityProgress(),
+            'Vortex [8]',
+            '#FF44AA',
+            '#AA0044',
             '8',
-            station.superAbilityCooldown > 0
+            station.abilityCooldown > 0
         );
     }
 
@@ -467,6 +398,7 @@ class StarBackground {
 
     draw() {
         // Sfondo base scuro
+        this.ctx.save();
         this.ctx.fillStyle = '#111';
         this.ctx.fillRect(0, 0, this.width, this.height);
         
@@ -476,8 +408,8 @@ class StarBackground {
             cloud.y += cloud.speed;
             
             if (cloud.y > this.height + cloud.height/2) {
-                cloud.y = -cloud.height;
-                cloud.x = Math.random() * this.width;
+            cloud.y = -cloud.height;
+            cloud.x = Math.random() * this.width;
             }
         });
         
@@ -488,17 +420,19 @@ class StarBackground {
             
             star.y += star.speed;
             if (star.y > this.height) {
-                star.y = 0;
-                star.x = Math.random() * this.width;
+            star.y = 0;
+            star.x = Math.random() * this.width;
             }
         });
+        this.ctx.restore();
     }
 }
 
 class Timer {
-    constructor(ctx, width) {
+    constructor(ctx, width, height) {  // Add height parameter
         this.ctx = ctx;
         this.width = width;
+        this.height = height;  // Store height
     }
 
     formatTime(seconds) {
@@ -509,39 +443,103 @@ class Timer {
 
     draw(gameTime) {
         const time = this.formatTime(gameTime);
-        // Font size responsivo basato sulla larghezza dello schermo
-        const fontSize = Math.min(72, this.width * 0.06);
+        const fontSize = Math.min(56, this.width * 0.05);
         
-        this.ctx.font = `bold ${fontSize}px "Arial Black"`;
-        this.ctx.textAlign = 'center';
+        // Position in bottom right with padding
+        const xPosition = this.width - 30;
+        const yPosition = this.height - 30;
         
-        // Sposta il timer un po' più in basso per non sovrapporsi ad altri elementi
-        const yPosition = Math.max(90, this.width * 0.08);
+        // Draw flashy tamarro text with neon effect
+        this.ctx.textAlign = 'right';
+        this.ctx.textBaseline = 'bottom';
         
-        // Contorno nero spesso
-        this.ctx.strokeStyle = '#000';
-        this.ctx.lineWidth = 6;
-        this.ctx.strokeText(time, this.width/2, yPosition);
+        // Multiple layer glow effect
+        for (let i = 4; i >= 0; i--) {
+            this.ctx.shadowBlur = 15 + i * 2;
+            this.ctx.shadowColor = '#0066FF';
+            this.ctx.strokeStyle = '#000000';
+            this.ctx.lineWidth = 4 - i;
+            this.ctx.font = `bold ${fontSize}px "Arial Black"`;
+            this.ctx.strokeText(`⏱️ ${time}`, xPosition, yPosition);
+        }
         
-        // Contorno dorato
-        this.ctx.lineWidth = 4;
-        this.ctx.strokeStyle = '#B8860B';
-        this.ctx.strokeText(time, this.width/2, yPosition);
-        
-        // Gradiente principale più vibrante
-        const gradient = this.ctx.createLinearGradient(this.width/2 - 100, 0, this.width/2 + 100, 0);
-        gradient.addColorStop(0, '#FFF200');  // Giallo brillante
-        gradient.addColorStop(0.5, '#FFD700'); // Oro
-        gradient.addColorStop(1, '#FFA500');   // Arancione
+        // Chrome gradient fill
+        const gradient = this.ctx.createLinearGradient(
+            xPosition, 
+            yPosition - fontSize,
+            xPosition,
+            yPosition
+        );
+        gradient.addColorStop(0, '#00FFFF');
+        gradient.addColorStop(0.5, '#FFFFFF');
+        gradient.addColorStop(1, '#00FFFF');
         
         this.ctx.fillStyle = gradient;
-        this.ctx.fillText(time, this.width/2, yPosition);
+        this.ctx.fillText(`⏱️ ${time}`, xPosition, yPosition);
         
-        // Bagliore più intenso
+        // Pulsating effect
+        const pulse = Math.sin(Date.now() / 200) * 0.2 + 0.8;
+        this.ctx.globalAlpha = pulse;
         this.ctx.shadowBlur = 20;
-        this.ctx.shadowColor = 'rgba(255, 215, 0, 0.8)';
-        this.ctx.fillText(time, this.width/2, yPosition);
+        this.ctx.shadowColor = '#00FFFF';
+        this.ctx.fillText(`⏱️ ${time}`, xPosition, yPosition);
+        
+        // Reset effects
+        this.ctx.globalAlpha = 1;
         this.ctx.shadowBlur = 0;
+    }
+}
+
+class WaveIndicator {
+    constructor(ctx, width) {
+        this.ctx = ctx;
+        this.width = width;
+    }
+
+    draw(waveNumber, waveProgress, isComplete) {
+        const x = this.width / 2;
+        const y = 50;
+        const barWidth = 300;
+        const barHeight = 30;
+
+        // Background shadow
+        this.ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+        this.ctx.fillRect(x - barWidth/2 - 2, y - 32, barWidth + 4, 64);
+
+        // Wave number
+        this.ctx.font = 'bold 24px Arial';
+        this.ctx.textAlign = 'center';
+        this.ctx.fillStyle = '#FFF';
+        this.ctx.fillText(`Wave ${waveNumber}`, x, y - 10);
+
+        // Progress bar background
+        this.ctx.fillStyle = 'rgba(50, 50, 50, 0.8)';
+        this.ctx.fillRect(x - barWidth/2, y + 5, barWidth, barHeight);
+
+        // Progress bar fill
+        const gradient = this.ctx.createLinearGradient(x - barWidth/2, 0, x + barWidth/2, 0);
+        if (isComplete) {
+            gradient.addColorStop(0, '#4CAF50');
+            gradient.addColorStop(1, '#45a049');
+        } else {
+            gradient.addColorStop(0, '#2196F3');
+            gradient.addColorStop(1, '#1976D2');
+        }
+        
+        this.ctx.fillStyle = gradient;
+        this.ctx.fillRect(x - barWidth/2, y + 5, barWidth * waveProgress, barHeight);
+
+        // Progress percentage
+        const percentage = Math.floor(waveProgress * 100);
+        this.ctx.font = 'bold 16px Arial';
+        this.ctx.fillStyle = '#FFF';
+        this.ctx.fillText(`${percentage}%`, x, y + 25);
+
+        // Status text
+        const status = isComplete ? 'WAVE COMPLETE!' : 'IN PROGRESS';
+        this.ctx.font = 'bold 14px Arial';
+        this.ctx.fillStyle = isComplete ? '#4CAF50' : '#FFF';
+        this.ctx.fillText(status, x, y + 50);
     }
 }
 
@@ -552,7 +550,8 @@ export class GameRenderer {
         this.height = height;
         this.upgradeColors = this.initializeUpgradeColors();
         this.background = new StarBackground(ctx, width, height);
-        this.timer = new Timer(ctx, width);
+        this.timer = new Timer(ctx, width, height);  // Pass height parameter
+        this.waveIndicator = new WaveIndicator(ctx, width);
     }
 
     initializeUpgradeColors() {
@@ -579,9 +578,9 @@ export class GameRenderer {
         this.clearCanvas();
         
         // Calcola posizioni responsive per gli elementi UI
-        const rightMargin = Math.min(150, this.width * 0.1);
+        const rightMargin = Math.min(200, this.width * 0.15); // Aumentato il margine
         const topMargin = Math.min(20, this.height * 0.03);
-        const upgradeBarWidth = Math.min(150, this.width * 0.15);
+        const upgradeBarWidth = Math.min(180, this.width * 0.18); // Aumentato la larghezza
         
         this.timer.draw(game.state.gameTime);
         
@@ -592,7 +591,7 @@ export class GameRenderer {
         upgradeBars.draw(
             game.state, 
             game.upgradeManager, 
-            this.width - upgradeBarWidth - rightMargin, 
+            this.width - upgradeBarWidth - rightMargin - 50, // Spostato più a sinistra
             topMargin, 
             upgradeBarWidth, 
             15, 
@@ -602,10 +601,19 @@ export class GameRenderer {
         const abilityButtons = new AbilityButtons(this.ctx);
         abilityButtons.draw(
             game.station, 
-            this.width - upgradeBarWidth - rightMargin, 
+            this.width - upgradeBarWidth - rightMargin - 50, // Spostato più a sinistra
             topMargin + Object.keys(game.upgradeManager.upgrades).length * 25 + 40, 
             80, 
             20
         );
+
+        // Add wave indicator drawing
+        if (game.currentWave) {
+            this.waveIndicator.draw(
+                game.waveNumber,
+                game.currentWave.getWaveProgress(),
+                game.currentWave.isComplete
+            );
+        }
     }
 }

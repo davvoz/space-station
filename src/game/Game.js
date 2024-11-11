@@ -11,6 +11,7 @@ import { GameUpgradeManager } from './GameUpgradeManager.js';
 import { PowerUp } from '../objects/PowerUp.js';
 import { BossEnemy } from '../objects/BossEnemy.js'; // Add this import
 import { FloatingText } from '../objects/FloatingText.js';
+import { Wave } from '../objects/Wave.js';
 
 class Game {
     constructor() {
@@ -32,8 +33,12 @@ class Game {
         window.keysPressed = {};
         this.startGameLoop();
         
-        // Add enemy spawning interval
-        this.enemySpawnInterval = setInterval(() => this.spawnEnemy(), 1000);
+        // Replace enemy spawn interval with wave system
+        this.currentWave = null;
+        this.waveNumber = 0;
+        this.waveCooldown = 5000; // 5 seconds between waves
+        this.waveTimer = 0;
+        this.startNextWave();
         
         this.comboCounter = 0; // Add combo counter
         this.comboTimer = 0; // Add combo timer
@@ -48,6 +53,7 @@ class Game {
         };
 
         this.paused = false; // Add pause state
+        window.game = this; // Make game instance globally available
     }
 
     initializeCanvas() {
@@ -199,70 +205,41 @@ class Game {
 
         // Add number key handlers for abilities
         if (event.key === '7') {
-            this.activateAutoFire();
-        }
-        if (event.key === '8') {
-            this.activateSuperAbility();
-        }
-
-        Object.entries(this.upgradeManager.upgrades).forEach(([name, upgrade]) => {
-            if (event.key === upgrade.key && this.state.credits >= upgrade.cost) {
-                // Verifichiamo che l'upgrade sia stato applicato correttamente
-                if (this.upgradeManager.applyUpgrade(name)) {
-                    this.state.credits -= upgrade.cost;
-                    this.playSound('coinSpend');
-                }
-            }
-        });
-    }
-
-    activateAutoFire() {
-        if (!this.station.autoFireActive && this.state.credits >= 100) {
-            if (this.station.activateAutoFire(15000)) {
-                this.state.credits -= 100;
-                this.playSound('powerup');
-                
-                this.floatingTexts.push(new FloatingText(
-                    this.station.x,
-                    this.station.y,
-                    "Auto-Fire Activated!",
-                    'special'
-                ));
-            }
-        }
-    }
-
-    activateSuperAbility() {
-        if (this.station.superAbilityCharge >= this.station.superAbilityMaxCharge) {
-            const explosions = this.station.activateSuperAbility();
+            const explosions = this.station.activateAbility('nova');
             if (explosions) {
-                explosions.forEach(exp => {
-                    setTimeout(() => {
-                        this.explosions.push(new Explosion(exp.x, exp.y, '#44AAFF', 2));
-                        
-                        // Damage nearby enemies
-                        this.enemies.forEach(enemy => {
-                            const dx = enemy.x - exp.x;
-                            const dy = enemy.y - exp.y;
-                            const distance = Math.sqrt(dx * dx + dy * dy);
-                            if (distance < 100) {
-                                enemy.health -= 50 * (1 - distance / 100);
-                            }
-                        });
-                    }, exp.delay);
-                });
-                
-                this.playSound('superAbility');
-                
-                // Add visual effect
+                this.handleAbilityEffects(explosions);
                 this.floatingTexts.push(new FloatingText(
                     this.station.x,
                     this.station.y,
-                    "SUPER NOVA!",
+                    "NOVA BLAST!",
                     'super'
                 ));
             }
         }
+        if (event.key === '8') {
+            const explosions = this.station.activateAbility('vortex');
+            if (explosions) {
+                this.handleAbilityEffects(explosions);
+                this.floatingTexts.push(new FloatingText(
+                    this.station.x,
+                    this.station.y,
+                    "GRAVITY VORTEX!",
+                    'super'
+                ));
+            }
+        }
+
+        Object.entries(this.upgradeManager.upgrades).forEach(([name, upgrade]) => {
+            if (event.key === upgrade.key) {
+                const currentCost = this.upgradeManager.getUpgradeCost(name);
+                if (this.state.credits >= currentCost) {
+                    if (this.upgradeManager.applyUpgrade(name)) {
+                        this.state.credits -= currentCost;
+                        this.playSound('coinSpend');
+                    }
+                }
+            }
+        });
     }
 
     startGameLoop() {
@@ -362,6 +339,63 @@ class Game {
 
         // Update floating texts
         this.floatingTexts = this.floatingTexts.filter(text => text.update());
+
+        // Replace enemy spawning logic with wave-based spawning
+        if (this.currentWave) {
+            if (this.currentWave.isComplete) {
+                this.waveTimer += deltaTime;
+                if (this.waveTimer >= this.waveCooldown) {
+                    this.startNextWave();
+                }
+            } else if (this.currentWave.canSpawnEnemy(Date.now())) {
+                const enemyData = this.currentWave.getNextEnemy();
+                if (enemyData) {
+                    this.spawnWaveEnemy(enemyData);
+                    console.log(`Spawned ${enemyData.type} enemy`); // Debug log
+                }
+            }
+        }
+
+        // Add wave completion effects
+        if (this.currentWave && this.currentWave.isComplete && !this.currentWave.rewardGiven) {
+            this.handleWaveCompletion();
+            this.currentWave.rewardGiven = true;
+        }
+    }
+
+    handleWaveCompletion() {
+        // Give wave completion rewards
+        const waveReward = Math.floor(100 * Math.pow(1.1, this.waveNumber));
+        this.state.credits += waveReward;
+        
+        // Add visual effects
+        this.floatingTexts.push(new FloatingText(
+            this.width / 2,
+            this.height / 2 - 50,
+            `Wave ${this.waveNumber} Complete!`,
+            'wave-complete'
+        ));
+        
+        this.floatingTexts.push(new FloatingText(
+            this.width / 2,
+            this.height / 2,
+            `+${waveReward} 💰`,
+            'reward'
+        ));
+
+        // Add celebration explosions
+        for (let i = 0; i < 8; i++) {
+            setTimeout(() => {
+                const angle = (i / 8) * Math.PI * 2;
+                const distance = 100;
+                const x = this.width/2 + Math.cos(angle) * distance;
+                const y = this.height/2 + Math.sin(angle) * distance;
+                this.explosions.push(new Explosion(x, y, '#FFD700', 2));
+            }, i * 200);
+        }
+
+        // Play celebration sound
+        this.playSound('combo');
     }
 
     updateGameState(deltaTime) {
@@ -375,10 +409,20 @@ class Game {
     }
 
     updateGameObjects() {
-        const currentTime = performance.now(); // Use performance.now() instead of Date.now()
+        const currentTime = performance.now();
         this.station.update(currentTime);
         this.projectiles.forEach(projectile => projectile.update());
-        this.enemies.forEach(enemy => enemy.update(this.station, this.width, this.height));
+        
+        // Pass canvas dimensions to enemy updates
+        this.enemies.forEach(enemy => {
+            if (enemy instanceof ShooterEnemy) {
+                const projectile = enemy.update(this.station, this.width, this.height);
+                if (projectile) this.enemyProjectiles.push(projectile);
+            } else {
+                enemy.update(this.station, this.width, this.height);
+            }
+        });
+        
         this.explosions.forEach(explosion => explosion.update());
     }
 
@@ -391,28 +435,47 @@ class Game {
         this.enemies = this.enemies.filter(enemy => {
             if (enemy.collidesWith(this.station)) {
                 if (this.station.invincible) {
-                    // Enemy takes damage and bounces off
-                    enemy.health -= 50;
-                    const dx = enemy.x - this.station.x;
-                    const dy = enemy.y - this.station.y;
-                    const angle = Math.atan2(dy, dx);
-                    enemy.dx = Math.cos(angle) * enemy.speed * 2;
-                    enemy.dy = Math.sin(angle) * enemy.speed * 2;
-                    
-                    if (enemy.health <= 0) {
-                        // Use reduced rewards for collision kills
-                        this.handleEnemyDeath(enemy, true);
-                        return false;
-                    }
-                    return true;
+                    // Enemy dies immediately when hitting invincible station
+                    this.handleEnemyDeath(enemy, true);
+                    return false;
                 }
                 
-                const damageTaken = this.station.takeDamage(enemy.damage);
+                // Calcola il danno in base alla wave
+                const waveDamage = Math.min(25, 10 + this.waveNumber * 2);
+                
+                // Applica il danno
+                const damageTaken = this.station.takeDamage(waveDamage);
+                
                 if (damageTaken) {
-                    // Use reduced rewards for collision kills
+                    // Ruba crediti
+                    const stolenCredits = Math.min(
+                        this.state.credits,
+                        Math.floor(20 * Math.sqrt(this.waveNumber))
+                    );
+                    
+                    if (stolenCredits > 0) {
+                        this.state.credits -= stolenCredits;
+                        this.floatingTexts.push(new FloatingText(
+                            this.station.x,
+                            this.station.y - 40,
+                            `-${stolenCredits}💰`,
+                            'stolen'
+                        ));
+                    }
+
+                    this.floatingTexts.push(new FloatingText(
+                        this.station.x,
+                        this.station.y - 20,
+                        `-${waveDamage}❤️`,
+                        'damage-taken'
+                    ));
+                    
+                    this.playSound('fail');
+                    
+                    // Enemy dies after dealing damage
                     this.handleEnemyDeath(enemy, true);
+                    return false; // Remove the enemy
                 }
-                return false;
             }
             return true;
         });
@@ -628,13 +691,6 @@ class Game {
         // Draw floating texts after everything else
         this.floatingTexts.forEach(text => text.draw(this.ctx));
 
-        // Rimuovi il vecchio codice di rendering del testo
-        // this.ctx.font = '20px Arial';
-        // this.ctx.fillStyle = 'white';
-        // this.ctx.fillText('Score: ' + ...);
-        // this.ctx.fillText('Credits: ' + ...);
-
-        // Aggiungi questo nuovo codice per il rendering del testo
     }
 
     playSound(soundName) {
@@ -733,19 +789,33 @@ class Game {
     }
 
     handlePowerUpCollection(powerup) {
-        if (powerup.type === 'invincibility') {
-            this.station.applyInvincibility(10000); // 10 seconds
-        }
-        powerup.apply(this.station);
+        const info = powerup.powerupInfo;
+        
+        this.station.addPowerUp(
+            powerup.type,
+            info.effect,
+            info.duration,
+            info.color,
+            info.icon,
+            info.remove
+        );
         
         // Visual effects
-        this.explosions.push(new Explosion(powerup.x, powerup.y, powerup.powerupInfo.color));
+        this.explosions.push(new Explosion(powerup.x, powerup.y, info.color));
         
         // Sound effects
         this.playSound('coinEarn');
         
         // Update score
         this.state.score += 500;
+        
+        // Floating text
+        this.floatingTexts.push(new FloatingText(
+            powerup.x,
+            powerup.y - 20,
+            powerup.type.toUpperCase(),
+            'powerup'
+        ));
     }
     
     updateComboSystem(deltaTime) {
@@ -770,6 +840,106 @@ class Game {
         this.enemies.push(boss);
         this.playSound('bossMusic');
     }
-}
 
+    startNextWave() {
+        this.waveNumber++;
+        this.currentWave = new Wave(this.waveNumber);
+        this.waveTimer = 0;
+        
+        // Show wave announcement
+        this.floatingTexts.push(new FloatingText(
+            this.width / 2,
+            this.height / 2,
+            `Wave ${this.waveNumber}`,
+            'wave'
+        ));
+    }
+
+    spawnWaveEnemy(enemyData) {
+        const spawnPoint = this.getRandomSpawnPoint();
+        let enemy;
+
+        // Create the appropriate enemy type
+        switch(enemyData.type) {
+            case 'speedy':
+                enemy = new SpeedyEnemy(spawnPoint.x, spawnPoint.y, this.waveNumber);
+                break;
+            case 'shooter':
+                enemy = new ShooterEnemy(spawnPoint.x, spawnPoint.y, this.waveNumber, this.entityManager);
+                break;
+            case 'boss':
+                enemy = new BossEnemy(spawnPoint.x, spawnPoint.y);
+                break;
+            default: // basic enemy
+                enemy = new Enemy(spawnPoint.x, spawnPoint.y, this.waveNumber);
+        }
+
+        // Apply wave-specific stats
+        enemy.health = enemyData.stats.health;
+        enemy.maxHealth = enemyData.stats.health;
+        enemy.damage = enemyData.stats.damage;
+        enemy.speed = enemyData.stats.speed;
+        enemy.value = enemyData.stats.value;
+
+        this.enemies.push(enemy);
+    }
+
+    handleEnemyDeath(enemy, isCollision = false) {
+        // Calculate rewards
+        const rewardMultiplier = isCollision ? 0.5 : 1;
+        const creditReward = Math.round(enemy.value * rewardMultiplier);
+        const scoreReward = Math.round(enemy.scoreValue * rewardMultiplier);
+
+        // Add visual effects
+        this.explosions.push(new Explosion(enemy.x, enemy.y, enemy.color));
+        
+        // Add floating score text
+        this.floatingTexts.push(new FloatingText(
+            enemy.x,
+            enemy.y - 20,
+            `+${creditReward}💰`,
+            isCollision ? 'collision' : 'reward'
+        ));
+
+        // Update game state
+        this.state.credits += creditReward;
+        this.state.score += scoreReward;
+        this.state.enemiesKilled++;
+
+        // Play sound effects
+        this.playSound('explosion');
+        this.playSound('coinEarn');
+
+        // Update wave tracking if needed
+        if (this.currentWave) {
+            this.currentWave.onEnemyDefeated();
+        }
+    }
+
+    handleAbilityEffects(explosions) {
+        explosions.forEach(exp => {
+            setTimeout(() => {
+                this.explosions.push(new Explosion(exp.x, exp.y, exp.color, 2));
+                
+                // Apply effects to enemies
+                this.enemies.forEach(enemy => {
+                    const dx = enemy.x - exp.x;
+                    const dy = enemy.y - exp.y;
+                    const distance = Math.sqrt(dx * dx + dy * dy);
+                    
+                    if (distance < 150) {
+                        enemy.health -= exp.damage * (1 - distance / 150);
+                        
+                        if (exp.pullForce) {
+                            const angle = Math.atan2(this.station.y - enemy.y, this.station.x - enemy.x);
+                            enemy.x += Math.cos(angle) * exp.pullForce;
+                            enemy.y += Math.sin(angle) * exp.pullForce;
+                        }
+                    }
+                });
+            }, exp.delay);
+        });
+    }
+}
 window.onload = () => new Game();
+

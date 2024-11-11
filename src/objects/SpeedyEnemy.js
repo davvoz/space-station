@@ -1,17 +1,21 @@
 import { Enemy } from './Enemy.js';
 export class SpeedyEnemy extends Enemy {
-    constructor(x, y, level) {
+    constructor(x, y, level = 1) {  // Add default level
         super(x, y, level);
         this.type = 'speedy';
         this.radius = 12;
         this.health *= 0.7;
         this.maxHealth = this.health;
-        this.speed = this.baseSpeed * 2; // Use baseSpeed instead of direct multiplication
+        this.speed = this.baseSpeed * 2;
         this.value *= 1.5;
         this.scoreValue *= 1.5;
-        this.color = `rgb(255,${Math.max(0, 200 - level * 20)},0)`;
-        this.angle = 0; // For rotation animation
-        this.mutationFactor = 1; // For mutation effect
+        
+        // Fix color calculation with safety checks
+        const greenValue = Math.max(0, Math.min(200, 200 - (level || 1) * 20));
+        this.color = `rgb(255,${greenValue},0)`;
+        
+        this.angle = 0;
+        this.mutationFactor = 1;
     }
 
     drawBody(ctx) {

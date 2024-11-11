@@ -18,15 +18,68 @@ export class PowerUp extends GameObject {
 
     getPowerUpInfo(type) {
         const powerupTypes = {
-            speed: { color: 'blue', icon: '⚡', effect: (station) => station.speed *= 1.5 },
-            shield: { color: 'cyan', icon: '🛡️', effect: (station) => station.shield += 50 },
-            damage: { color: 'red', icon: '💥', effect: (station) => station.projectileDamage *= 2 },
-            multi: { color: 'purple', icon: '🔫', effect: (station) => station.turrets += 1 },
-            health: { color: 'green', icon: '❤️', effect: (station) => station.health += 50 },
+            speed: { 
+                color: 'blue', 
+                icon: '⚡', 
+                duration: 10000,
+                effect: (station) => {
+                    station.baseSpeed = station.speed;
+                    station.speed *= 1.5;
+                },
+                remove: (station) => {
+                    station.speed = station.baseSpeed;
+                }
+            },
+            shield: { 
+                color: 'cyan', 
+                icon: '🛡️', 
+                duration: 15000,
+                effect: (station) => {
+                    station.shield += 50;
+                    station.bonusShield = true;
+                },
+                remove: (station) => {
+                    station.bonusShield = false;
+                }
+            },
+            damage: { 
+                color: 'red', 
+                icon: '💥', 
+                duration: 8000,
+                effect: (station) => {
+                    station.baseDamage = station.projectileDamage;
+                    station.projectileDamage *= 2;
+                },
+                remove: (station) => {
+                    station.projectileDamage = station.baseDamage;
+                }
+            },
+            multi: { 
+                color: 'purple', 
+                icon: '🔫', 
+                duration: 12000,
+                effect: (station) => {
+                    station.baseTurrets = station.turrets;
+                    station.turrets += 2;
+                },
+                remove: (station) => {
+                    station.turrets = station.baseTurrets;
+                }
+            },
+            health: { 
+                color: 'green', 
+                icon: '❤️',
+                duration: 0, // istantaneo
+                effect: (station) => {
+                    station.health = Math.min(station.maxHealth, station.health + 50);
+                }
+            },
             invincibility: { 
                 color: 'yellow', 
                 icon: '⭐', 
-                effect: (station) => station.applyInvincibility(10000) 
+                duration: 5000,
+                effect: (station) => station.applyInvincibility(5000),
+                remove: () => {} // La rimozione è già gestita da applyInvincibility
             }
         };
         return powerupTypes[type];
