@@ -1,7 +1,5 @@
 import { UIComponent } from '../ui/components/UIComponent.js';
 import { RenderUtils } from '../utils/RenderUtils.js';
-import { ColorUtils } from '../utils/ColorUtils.js';
-import { GAME_CONFIG } from '../config/GameConfig.js';
 
 export class GameStats extends UIComponent {
     constructor(ctx) {

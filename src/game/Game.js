@@ -12,6 +12,7 @@ import { PowerUp } from '../objects/PowerUp.js';
 import { BossEnemy } from '../objects/BossEnemy.js'; // Add this import
 import { FloatingText } from '../objects/FloatingText.js';
 import { Wave } from '../objects/Wave.js';
+import { GameOverPopup } from '../ui/components/GameOverPopup.js';
 
 class Game {
     constructor() {
@@ -89,11 +90,10 @@ class Game {
             coinSpend: document.getElementById('coinSpendSound'),
             combo: document.getElementById('comboSound'), // Add combo sound
             bossMusic: document.getElementById('bossMusic'), // Add boss music
-            background: document.getElementById('background'), // Aggiungi background music qui
+            background: document.getElementById('background'),
             fail: document.getElementById('failSound')
         };
 
-        // Simplified sound initialization
         Object.values(sounds).forEach(sound => {
             if (sound) {
                 sound.volume = sound.id === 'background' ? 0.3 : GAME_CONFIG.SOUND_VOLUME;
@@ -105,7 +105,6 @@ class Game {
 
     handleSoundError(error) {
         console.warn('Error loading sound:', error);
-        // Aggiungere fallback per il suono
         return null;
     }
 
@@ -126,13 +125,7 @@ class Game {
 
     handleClick(event) {
         const rect = this.canvas.getBoundingClientRect();
-        const clickX = event.clientX - rect.left;
-        const clickY = event.clientY - rect.top;
 
-        // Check if click is on ability buttons
-        if (this.isClickOnAbilityButtons(clickX, clickY)) {
-            return; // Don't process as normal shot if clicking abilities
-        }
 
         const currentTime = Date.now();
         if (currentTime - this.lastShot < 1000 / this.station.fireRate) return;
@@ -146,27 +139,6 @@ class Game {
         this.fireProjectiles(targetX, targetY);
     }
 
-    isClickOnAbilityButtons(x, y) {
-        const buttonSize = 80;
-        const buttonSpacing = 20;
-        const upgradesHeight = Object.keys(this.upgradeManager.upgrades).length * 25 + 20;
-        const startY = 20 + upgradesHeight + buttonSpacing;
-        const startX = this.width - 170; // Adjust based on your layout
-
-        // Check Auto-Fire button
-        if (this.isPointInButton(x, y, startX, startY, buttonSize)) {
-            this.activateAutoFire();
-            return true;
-        }
-
-        // Check Super Nova button
-        if (this.isPointInButton(x, y, startX + buttonSize + buttonSpacing, startY, buttonSize)) {
-            this.activateSuperAbility();
-            return true;
-        }
-
-        return false;
-    }
 
     isPointInButton(x, y, buttonX, buttonY, buttonSize) {
         return x >= buttonX && x <= buttonX + buttonSize &&
@@ -195,16 +167,8 @@ class Game {
     }
 
     handleKeyDown(event) {
-        // Add ability key bindings
-        if (event.code === 'Space') {
-            this.activateAutoFire();
-        }
-        if (event.code === 'KeyQ') {
-            this.activateSuperAbility();
-        }
 
-        // Add number key handlers for abilities
-        if (event.key === '7') {
+        if (event.code === 'Space') {
             const explosions = this.station.activateAbility('nova');
             if (explosions) {
                 this.handleAbilityEffects(explosions);
@@ -216,7 +180,7 @@ class Game {
                 ));
             }
         }
-        if (event.key === '8') {
+        if (event.key === 'Control') {
             const explosions = this.station.activateAbility('vortex');
             if (explosions) {
                 this.handleAbilityEffects(explosions);
@@ -272,16 +236,12 @@ class Game {
         this.checkCollisions();
         this.cleanupObjects();
         
-        // Update difficulty scaling - modificato per una progressione più graduale
         this.state.difficultyScaling = Math.min(3.0, 0.5 + (this.state.gameTime / 120000));
         
-        // Update spawn rate - reso più graduale
         this.state.enemySpawnCooldown = Math.max(200, 2000 - (this.state.gameTime / 1000)); // Faster spawn rate over time
         
-        // Aumenta gradualmente il numero massimo di nemici
         this.state.maxEnemies = Math.min(50, 12 + Math.floor(this.state.gameTime / 30000)); // Increase max enemies over time
 
-        // Update and handle enemy projectiles
         this.enemies.forEach(enemy => {
             if (enemy instanceof ShooterEnemy) {
                 const projectile = enemy.update(this.station, this.width, this.height);
@@ -293,7 +253,6 @@ class Game {
         
         this.enemyProjectiles.forEach(projectile => projectile.update());
         
-        // Check enemy projectile collisions
         this.enemyProjectiles = this.enemyProjectiles.filter(projectile => {
             if (projectile.collidesWith(this.station) && this.state.invulnerableTime <= 0) {
                 if (this.station.shield > 0) {
@@ -306,14 +265,12 @@ class Game {
             return this.isProjectileOnScreen(projectile);
         });
 
-        // Spawn powerups
         this.state.powerupTimer += deltaTime;
         if (this.state.powerupTimer >= this.state.powerupInterval) {
             this.state.powerupTimer = 0;
             this.spawnPowerUp();
         }
 
-        // Update and check powerup collisions
         this.state.activePowerups.forEach(powerup => powerup.update());
         this.state.activePowerups = this.state.activePowerups.filter(powerup => {
             if (powerup.collidesWith(this.station)) {
@@ -340,7 +297,6 @@ class Game {
         // Update floating texts
         this.floatingTexts = this.floatingTexts.filter(text => text.update());
 
-        // Replace enemy spawning logic with wave-based spawning
         if (this.currentWave) {
             if (this.currentWave.isComplete) {
                 this.waveTimer += deltaTime;
@@ -458,7 +414,7 @@ class Game {
                         this.floatingTexts.push(new FloatingText(
                             this.station.x,
                             this.station.y - 40,
-                            `-${stolenCredits}💰`,
+                            `-${stolenCredits}💰 stolen`,
                             'stolen'
                         ));
                     }
@@ -466,8 +422,8 @@ class Game {
                     this.floatingTexts.push(new FloatingText(
                         this.station.x,
                         this.station.y - 20,
-                        `-${waveDamage}❤️`,
-                        'damage-taken'
+                        `-${waveDamage}❤️ damage`,
+                        'damage'
                     ));
                     
                     this.playSound('fail');
@@ -590,7 +546,7 @@ class Game {
     }
 
     showGameOverPopup() {
-        this.paused = true; // Pause the game
+        this.paused = true;
         const gameStats = {
             score: this.state.score,
             time: this.formatTime(this.state.gameTime),
@@ -599,77 +555,10 @@ class Game {
             difficulty: this.state.difficultyScaling.toFixed(1)
         };
 
-        const popup = document.createElement('div');
-        popup.style.cssText = `
-            position: fixed;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            background: linear-gradient(45deg, #ff6b6b, #4ecdc4);
-            padding: 30px;
-            border-radius: 15px;
-            text-align: center;
-            box-shadow: 0 0 20px rgba(0,0,0,0.5);
-            z-index: 1000;
-            min-width: 300px;
-        `;
-
-        // Create stats table
-        const statsHtml = `
-            <h2 style="color: white; font-size: 2.5em; margin-bottom: 20px; text-shadow: 2px 2px 4px rgba(0,0,0,0.3);">
-                Game Over!
-            </h2>
-            <div style="background: rgba(0,0,0,0.2); padding: 20px; border-radius: 10px; margin-bottom: 20px;">
-                <table style="width: 100%; color: white; font-size: 1.2em; text-align: left;">
-                    <tr>
-                        <td>🎯 Final Score:</td>
-                        <td>${gameStats.score}</td>
-                    </tr>
-                    <tr>
-                        <td>⏱️ Survival Time:</td>
-                        <td>${gameStats.time}</td>
-                    </tr>
-                    <tr>
-                        <td>💀 Enemies Defeated:</td>
-                        <td>${gameStats.enemiesKilled}</td>
-                    </tr>
-                    <tr>
-                        <td>💰 Credits Earned:</td>
-                        <td>${gameStats.credits}</td>
-                    </tr>
-                    <tr>
-                        <td>⚡ Final Difficulty:</td>
-                        <td>${gameStats.difficulty}x</td>
-                    </tr>
-                </table>
-            </div>
-        `;
-
-        popup.innerHTML = statsHtml;
-
-        const retryButton = document.createElement('button');
-        retryButton.textContent = 'Play Again';
-        retryButton.style.cssText = `
-            background: #ffd93d;
-            border: none;
-            padding: 15px 30px;
-            border-radius: 25px;
-            font-size: 1.2em;
-            cursor: pointer;
-            transition: transform 0.2s;
-            &:hover {
-                transform: scale(1.1);
-            }
-        `;
-
-        retryButton.addEventListener('click', () => {
-            document.body.removeChild(popup);
-            this.paused = false; // Unpause before reset
+        new GameOverPopup(gameStats, () => {
+            this.paused = false;
             this.resetGame();
         });
-
-        popup.appendChild(retryButton);
-        document.body.appendChild(popup);
     }
 
     formatTime(milliseconds) {
@@ -688,8 +577,14 @@ class Game {
         this.enemyProjectiles.forEach(projectile => projectile.draw(this.ctx));
         this.state.activePowerups.forEach(powerup => powerup.draw(this.ctx));
         
-        // Draw floating texts after everything else
-        this.floatingTexts.forEach(text => text.draw(this.ctx));
+        // Add debugging for floating texts
+        this.floatingTexts.forEach((text, index) => {
+            if (!text || typeof text.draw !== 'function') {
+                console.error('Invalid floating text at index', index, ':', text);
+            } else {
+                text.draw(this.ctx);
+            }
+        });
 
     }
 

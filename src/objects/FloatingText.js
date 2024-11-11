@@ -5,7 +5,7 @@ export class FloatingText {
         this.text = text;
         this.type = type;
         this.alpha = 1;
-        this.scale = 1;
+        this.scale = 1.5;
         this.lifetime = 0;
         this.maxLifetime = 1000; // 1 second
         this.velocity = {
