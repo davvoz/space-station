@@ -9,10 +9,11 @@ import { SpeedyEnemy } from '../objects/SpeedyEnemy.js';
 import { Explosion } from '../objects/Explosion.js';
 import { GameUpgradeManager } from './GameUpgradeManager.js';
 import { PowerUp } from '../objects/PowerUp.js';
-import { BossEnemy } from '../objects/BossEnemy.js'; // Add this import
+import { BossEnemy } from '../objects/BossEnemy.js';
 import { FloatingText } from '../objects/FloatingText.js';
 import { Wave } from '../objects/Wave.js';
 import { GameOverPopup } from '../ui/components/GameOverPopup.js';
+import { SoundManager } from './managers/SoundManager.js'; 
 
 class Game {
     constructor() {
@@ -21,11 +22,11 @@ class Game {
         this.renderer = new GameRenderer(this.ctx, this.width, this.height);
         this.station = new SpaceStation(this.width / 2, this.height / 2);
         this.upgradeManager = new GameUpgradeManager(this.station);
+        this.soundManager = new SoundManager();
 
         this.enemies = [];
         this.projectiles = [];
         this.explosions = [];
-        this.sounds = this.initializeSounds();
         this.enemyProjectiles = [];
         this.floatingTexts = [];  // Add this line
 
@@ -82,27 +83,6 @@ class Game {
         window.addEventListener('resize', updateCanvasSize);
     }
 
-    initializeSounds() {
-        const sounds = {
-            shoot: document.getElementById('shootSound'),
-            explosion: document.getElementById('explosionSound'),
-            coinEarn: document.getElementById('coinEarnSound'),
-            coinSpend: document.getElementById('coinSpendSound'),
-            combo: document.getElementById('comboSound'), // Add combo sound
-            bossMusic: document.getElementById('bossMusic'), // Add boss music
-            background: document.getElementById('background'),
-            fail: document.getElementById('failSound')
-        };
-
-        Object.values(sounds).forEach(sound => {
-            if (sound) {
-                sound.volume = sound.id === 'background' ? 0.3 : GAME_CONFIG.SOUND_VOLUME;
-            }
-        });
-
-        return sounds;
-    }
-
     handleSoundError(error) {
         console.warn('Error loading sound:', error);
         return null;
@@ -131,7 +111,7 @@ class Game {
         if (currentTime - this.lastShot < 1000 / this.station.fireRate) return;
 
         this.lastShot = currentTime;
-        this.playSound('shoot');
+        this.soundManager.play('shoot');
 
         const targetX = event.clientX - rect.left;
         const targetY = event.clientY - rect.top;
@@ -199,7 +179,7 @@ class Game {
                 if (this.state.credits >= currentCost) {
                     if (this.upgradeManager.applyUpgrade(name)) {
                         this.state.credits -= currentCost;
-                        this.playSound('coinSpend');
+                        this.soundManager.play('coinSpend');
                     }
                 }
             }
@@ -209,7 +189,7 @@ class Game {
     startGameLoop() {
         this.lastTime = performance.now();
         window.requestAnimationFrame(this.gameLoop.bind(this));
-        this.playBackgroundMusic();
+        this.soundManager.playBackgroundMusic();
     }
 
     gameLoop(timestamp) {
@@ -351,7 +331,7 @@ class Game {
         }
 
         // Play celebration sound
-        this.playSound('combo');
+        this.soundManager.play('combo');
     }
 
     updateGameState(deltaTime) {
@@ -426,7 +406,7 @@ class Game {
                         'damage'
                     ));
                     
-                    this.playSound('fail');
+                    this.soundManager.play('fail');
                     
                     // Enemy dies after dealing damage
                     this.handleEnemyDeath(enemy, true);
@@ -457,30 +437,35 @@ class Game {
     }
 
     handleEnemyDeath(enemy, isCollision = false) {
-        // Reduce rewards by 50% for collision kills
+        // Calculate rewards
         const rewardMultiplier = isCollision ? 0.5 : 1;
         const creditReward = Math.round(enemy.value * rewardMultiplier);
         const scoreReward = Math.round(enemy.scoreValue * rewardMultiplier);
 
-        // Add floating reward text
+        // Add visual effects
+        this.explosions.push(new Explosion(enemy.x, enemy.y, enemy.color));
+        
+        // Add floating score text
         this.floatingTexts.push(new FloatingText(
             enemy.x,
-            enemy.y - 20, 
+            enemy.y - 20,
             `+${creditReward}💰`,
             isCollision ? 'collision' : 'reward'
         ));
 
-        // Add explosion
-        this.explosions.push(new Explosion(enemy.x, enemy.y, enemy.color));
-        
-        // Add rounded points and credits
+        // Update game state
         this.state.credits += creditReward;
         this.state.score += scoreReward;
-        this.state.enemiesKilled++; // Increment kill count for ALL enemy deaths
-        
+        this.state.enemiesKilled++;
+
         // Play sound effects
-        this.playSound('explosion');
-        this.playSound('coinEarn');
+        this.soundManager.play('explosion');
+        this.soundManager.play('coinEarn');
+
+        // Update wave tracking if needed
+        if (this.currentWave) {
+            this.currentWave.onEnemyDefeated();
+        }
     }
 
     handleProjectileHit(enemy) {
@@ -502,7 +487,7 @@ class Game {
         this.comboCounter++;
         this.comboTimer = 0;
         if (this.comboCounter % GAME_CONFIG.COMBO_THRESHOLD === 0) {
-            this.playSound('combo');
+            this.soundManager.play('combo');
             this.state.score += GAME_CONFIG.COMBO_BONUS;
         }
     }
@@ -522,7 +507,7 @@ class Game {
     }
 
     handleGameOver() {
-        this.playSound('fail'); // Add this line at the start of handleGameOver
+        this.soundManager.play('fail'); // Add this line at the start of handleGameOver
         this.showGameOverPopup(); // Aggiungi questa chiamata
         
         // Sposta la logica di reset in un metodo separato
@@ -539,10 +524,7 @@ class Game {
         this.comboTimer = 0;
         this.bossSpawned = false;
         
-        if (this.sounds.background) {
-            this.sounds.background.pause();
-            this.sounds.background.currentTime = 0;
-        }
+        this.soundManager.stopBackgroundMusic();
     }
 
     showGameOverPopup() {
@@ -588,43 +570,6 @@ class Game {
 
     }
 
-    playSound(soundName) {
-        if (!this.state.muted && this.sounds[soundName]) {
-            this.sounds[soundName].currentTime = 0;
-            this.sounds[soundName].play();
-        }
-    }
-
-    playBackgroundMusic() {
-        const bgMusic = this.sounds.background;
-        if (!bgMusic) return;
-
-        // Set loop property to true
-        bgMusic.loop = true;
-
-        // Simple click handler to start music
-        const startMusic = () => {
-            bgMusic.play().catch(e => console.warn('Background music autoplay prevented:', e));
-            document.removeEventListener('click', startMusic);
-        };
-
-        document.addEventListener('click', startMusic);
-    }
-
-    roundRect(x, y, width, height, radius) {
-        this.ctx.beginPath();
-        this.ctx.moveTo(x + radius, y);
-        this.ctx.lineTo(x + width - radius, y);
-        this.ctx.quadraticCurveTo(x + width, y, x + width, y + radius);
-        this.ctx.lineTo(x + width, y + height - radius);
-        this.ctx.quadraticCurveTo(x + width, y + height, x + width - radius, y + height);
-        this.ctx.lineTo(x + radius, y + height);
-        this.ctx.quadraticCurveTo(x, y + height, x, y + height - radius);
-        this.ctx.lineTo(x, y + radius);
-        this.ctx.quadraticCurveTo(x, y, x + radius, y);
-        this.ctx.closePath();
-    }
-    
     spawnEnemy() {
         if (this.enemies.length >= this.state.maxEnemies) return;
         
@@ -699,7 +644,7 @@ class Game {
         this.explosions.push(new Explosion(powerup.x, powerup.y, info.color));
         
         // Sound effects
-        this.playSound('coinEarn');
+        this.soundManager.play('coinEarn');
         
         // Update score
         this.state.score += 500;
@@ -733,7 +678,7 @@ class Game {
     spawnBoss() {
         const boss = new BossEnemy(this.width / 2, -100);
         this.enemies.push(boss);
-        this.playSound('bossMusic');
+        this.soundManager.play('bossMusic');
     }
 
     startNextWave() {
@@ -777,38 +722,6 @@ class Game {
         enemy.value = enemyData.stats.value;
 
         this.enemies.push(enemy);
-    }
-
-    handleEnemyDeath(enemy, isCollision = false) {
-        // Calculate rewards
-        const rewardMultiplier = isCollision ? 0.5 : 1;
-        const creditReward = Math.round(enemy.value * rewardMultiplier);
-        const scoreReward = Math.round(enemy.scoreValue * rewardMultiplier);
-
-        // Add visual effects
-        this.explosions.push(new Explosion(enemy.x, enemy.y, enemy.color));
-        
-        // Add floating score text
-        this.floatingTexts.push(new FloatingText(
-            enemy.x,
-            enemy.y - 20,
-            `+${creditReward}💰`,
-            isCollision ? 'collision' : 'reward'
-        ));
-
-        // Update game state
-        this.state.credits += creditReward;
-        this.state.score += scoreReward;
-        this.state.enemiesKilled++;
-
-        // Play sound effects
-        this.playSound('explosion');
-        this.playSound('coinEarn');
-
-        // Update wave tracking if needed
-        if (this.currentWave) {
-            this.currentWave.onEnemyDefeated();
-        }
     }
 
     handleAbilityEffects(explosions) {
