@@ -12,6 +12,7 @@ export class SoundManager {
             explosion: document.getElementById('explosionSound'),
             coinEarn: document.getElementById('coinEarnSound'),
             coinSpend: document.getElementById('coinSpendSound'),
+            coinSpend2: document.getElementById('coinSpendSound2'),
             combo: document.getElementById('comboSound'),
             bossMusic: document.getElementById('bossMusic'),
             background: document.getElementById('background'),

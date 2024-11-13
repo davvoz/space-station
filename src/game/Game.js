@@ -3,7 +3,7 @@ import { GameState } from './GameState.js';
 import { GameRenderer } from './GameRenderer.js';
 import { SpaceStation } from '../objects/SpaceStation.js';
 import { Projectile } from '../objects/Projectile.js';
-import { Enemy} from '../objects/Enemy.js';
+import { Enemy } from '../objects/Enemy.js';
 import { ShooterEnemy } from '../objects/ShooterEnemy.js';
 import { SpeedyEnemy } from '../objects/SpeedyEnemy.js';
 import { Explosion } from '../objects/Explosion.js';
@@ -13,7 +13,8 @@ import { BossEnemy } from '../objects/BossEnemy.js';
 import { FloatingText } from '../objects/FloatingText.js';
 import { Wave } from '../objects/Wave.js';
 import { GameOverPopup } from '../ui/components/GameOverPopup.js';
-import { SoundManager } from './managers/SoundManager.js'; 
+import { SoundManager } from './managers/SoundManager.js';
+import { SpatialGrid } from '../utils/SpatialGrid.js';
 
 class Game {
     constructor() {
@@ -34,14 +35,14 @@ class Game {
         // Initialize key tracking
         window.keysPressed = {};
         this.startGameLoop();
-        
+
         // Replace enemy spawn interval with wave system
         this.currentWave = null;
         this.waveNumber = 0;
         this.waveCooldown = 5000; // 5 seconds between waves
         this.waveTimer = 0;
         this.startNextWave();
-        
+
         this.comboCounter = 0; // Add combo counter
         this.comboTimer = 0; // Add combo timer
         this.bossSpawned = false; // Track if boss is spawned
@@ -63,29 +64,33 @@ class Game {
 
         this.autoFireEnabled = false;
         this.setupAutoFireToggle();
+        this.setupSettingsButton();
+
+        // Aggiungi la griglia spaziale
+        this.spatialGrid = new SpatialGrid(this.width, this.height, 100); // Celle 100x100
     }
 
     initializeCanvas() {
         this.canvas = document.getElementById('gameCanvas');
         this.ctx = this.canvas.getContext('2d');
-        
+
         // Set canvas size to window size
         const updateCanvasSize = () => {
             this.width = window.innerWidth;
             this.height = window.innerHeight;
             this.canvas.width = this.width;
             this.canvas.height = this.height;
-            
+
             // Update station position when resize
             if (this.station) {
                 this.station.x = this.width / 2;
                 this.station.y = this.height / 2;
             }
         };
-        
+
         // Initial size
         updateCanvasSize();
-        
+
         // Update on resize
         window.addEventListener('resize', updateCanvasSize);
     }
@@ -99,12 +104,12 @@ class Game {
         this.canvas.addEventListener('click', this.handleClick.bind(this));
         this.canvas.addEventListener('mousemove', this.handleMouseMove.bind(this));
         window.addEventListener('keydown', this.handleKeyDown.bind(this));
-        
+
         // Add key event listeners
         window.addEventListener('keydown', (e) => {
             window.keysPressed[e.code] = true;
         });
-        
+
         window.addEventListener('keyup', (e) => {
             window.keysPressed[e.code] = false;
         });
@@ -147,7 +152,7 @@ class Game {
 
     isPointInButton(x, y, buttonX, buttonY, buttonSize) {
         return x >= buttonX && x <= buttonX + buttonSize &&
-               y >= buttonY && y <= buttonY + buttonSize;
+            y >= buttonY && y <= buttonY + buttonSize;
     }
 
     fireProjectiles(targetX, targetY) {
@@ -182,7 +187,7 @@ class Game {
                     this.station.y,
                     "NOVA BLAST!",
                     'super'
-                 ));
+                ));
                 this.soundManager.play('nova'); // Add this line to play nova sound
             }
         }
@@ -241,11 +246,11 @@ class Game {
         this.updateGameObjects();
         this.checkCollisions();
         this.cleanupObjects();
-        
+
         this.state.difficultyScaling = Math.min(3.0, 0.5 + (this.state.gameTime / 120000));
-        
+
         this.state.enemySpawnCooldown = Math.max(200, 2000 - (this.state.gameTime / 1000)); // Faster spawn rate over time
-        
+
         this.state.maxEnemies = Math.min(50, 12 + Math.floor(this.state.gameTime / 30000)); // Increase max enemies over time
 
         this.enemies.forEach(enemy => {
@@ -256,9 +261,9 @@ class Game {
                 enemy.update(this.station, this.width, this.height);
             }
         });
-        
+
         this.enemyProjectiles.forEach(projectile => projectile.update());
-        
+
         this.enemyProjectiles = this.enemyProjectiles.filter(projectile => {
             if (projectile.collidesWith(this.station) && this.state.invulnerableTime <= 0) {
                 if (this.station.shield > 0) {
@@ -285,7 +290,7 @@ class Game {
             }
             return true;
         });
-        
+
         this.updateComboSystem(deltaTime); // Update combo system
         this.checkBossSpawn(); // Check if boss should spawn
 
@@ -333,11 +338,11 @@ class Game {
                 this.lastAutoShot = currentTime;
             }
         }
-        
+
         // Update station auto-fire
         this.station.updateAutoFire(this.waveNumber);
         this.autoFireEnabled = this.station.autoFireActive;
-        
+
         // Update auto-fire toggle button
         const toggleBtn = document.getElementById('autoFireToggle');
         if (toggleBtn) {
@@ -350,7 +355,7 @@ class Game {
         // Give wave completion rewards
         const waveReward = Math.floor(100 * Math.pow(1.1, this.waveNumber));
         this.state.credits += waveReward;
-        
+
         // Add visual effects
         this.floatingTexts.push(new FloatingText(
             this.width / 2,
@@ -358,7 +363,7 @@ class Game {
             `Wave ${this.waveNumber} Complete!`,
             'wave-complete'
         ));
-        
+
         this.floatingTexts.push(new FloatingText(
             this.width / 2,
             this.height / 2,
@@ -371,8 +376,8 @@ class Game {
             setTimeout(() => {
                 const angle = (i / 8) * Math.PI * 2;
                 const distance = 100;
-                const x = this.width/2 + Math.cos(angle) * distance;
-                const y = this.height/2 + Math.sin(angle) * distance;
+                const x = this.width / 2 + Math.cos(angle) * distance;
+                const y = this.height / 2 + Math.sin(angle) * distance;
                 this.explosions.push(new Explosion(x, y, '#FFD700', 2));
             }, i * 200);
         }
@@ -395,7 +400,7 @@ class Game {
         const currentTime = performance.now();
         this.station.update(currentTime);
         this.projectiles.forEach(projectile => projectile.update());
-        
+
         // Pass canvas dimensions to enemy updates
         this.enemies.forEach(enemy => {
             if (enemy instanceof ShooterEnemy) {
@@ -405,60 +410,94 @@ class Game {
                 enemy.update(this.station, this.width, this.height);
             }
         });
-        
+
         this.explosions.forEach(explosion => explosion.update());
+
+        // Aggiorna la griglia con le nuove posizioni
+        this.spatialGrid.clear();
+        this.enemies.forEach(enemy => this.spatialGrid.insert(enemy));
+        this.projectiles.forEach(projectile => this.spatialGrid.insert(projectile));
     }
 
     checkCollisions() {
+        // Check projectiles against enemies
+        this.projectiles = this.projectiles.filter(projectile => {
+            let hit = false;
+            
+            this.enemies.forEach(enemy => {
+                if (!hit && projectile.collidesWith(enemy)) {
+                    hit = true;
+                    enemy.health -= this.station.projectileDamage;
+                    enemy.createCollisionEffect();
+                    this.soundManager.play('explosion');
+
+                    
+                    if (enemy.health <= 0) {
+                        this.handleEnemyDeath(enemy, false);
+                        const enemyIndex = this.enemies.indexOf(enemy);
+                        if (enemyIndex > -1) {
+                            this.enemies.splice(enemyIndex, 1);
+                        }
+                    }
+                }
+            });
+            
+            return !hit;
+        });
+
+        // Keep existing station collision checks
         this.checkEnemyCollisions();
-        this.checkProjectileCollisions();
     }
 
     checkEnemyCollisions() {
         this.enemies = this.enemies.filter(enemy => {
             if (enemy.collidesWith(this.station)) {
                 if (this.station.invincible) {
-                    // Enemy dies immediately when hitting invincible station
                     this.handleEnemyDeath(enemy, true);
                     return false;
                 }
-                
-                // Calcola il danno in base alla wave
-                const waveDamage = Math.min(25, 10 + this.waveNumber * 2);
-                
-                // Applica il danno
-                const damageTaken = this.station.takeDamage(waveDamage);
-                
-                if (damageTaken) {
-                    // Ruba crediti
-                    const stolenCredits = Math.min(
-                        this.state.credits,
-                        Math.floor(20 * Math.sqrt(this.waveNumber))
-                    );
-                    
-                    if (stolenCredits > 0) {
-                        this.state.credits -= stolenCredits;
-                        this.floatingTexts.push(new FloatingText(
-                            this.station.x,
-                            this.station.y - 40,
-                            `-${stolenCredits}💰 stolen`,
-                            'stolen'
-                        ));
-                    }
 
+                // Danno base aumentato esponenzialmente con la wave
+                const baseDamage = 10;
+                const waveDamage = Math.floor(baseDamage * Math.pow(1.2, this.waveNumber));
+                
+                // Calcolo crediti rubati con scaling più aggressivo
+                const baseSteal = 20;
+                const stolenCredits = Math.min(
+                    this.state.credits,
+                    Math.floor(baseSteal * Math.pow(1.3, this.waveNumber))
+                );
+
+                // Applica il danno
+                if (this.station.shield > 0) {
+                    this.station.shield = Math.max(0, this.station.shield - waveDamage);
+                } else {
+                    this.station.health -= waveDamage;
+                }
+
+                // Sottrai i crediti solo se ne abbiamo
+                if (this.state.credits > 0 && stolenCredits > 0) {
+                    this.state.credits -= stolenCredits;
                     this.floatingTexts.push(new FloatingText(
                         this.station.x,
-                        this.station.y - 20,
-                        `-${waveDamage}❤️ damage`,
-                        'damage'
+                        this.station.y - 60,
+                        `-${stolenCredits}💰`,
+                        'stolen'
                     ));
-                    
-                    this.soundManager.play('fail');
-                    
-                    // Enemy dies after dealing damage
-                    this.handleEnemyDeath(enemy, true);
-                    return false; // Remove the enemy
                 }
+
+                // Mostra il danno
+                this.floatingTexts.push(new FloatingText(
+                    this.station.x,
+                    this.station.y - 30,
+                    `-${waveDamage}❤️`,
+                    'damage'
+                ));
+
+                this.soundManager.play('coinSpend2');
+                
+                this.handleEnemyDeath(enemy, true);
+                return false;
             }
             return true;
         });
@@ -467,7 +506,7 @@ class Game {
     checkProjectileCollisions() {
         this.projectiles = this.projectiles.filter(projectile => {
             let hit = false;
-            
+
             // Check collisions with enemies
             this.enemies = this.enemies.filter(enemy => {
                 if (!hit && projectile.collidesWith(enemy)) {
@@ -484,20 +523,31 @@ class Game {
     }
 
     handleEnemyDeath(enemy, isCollision = false) {
-        // Calculate rewards
-        const rewardMultiplier = isCollision ? 0.5 : 1;
-        const creditReward = Math.round(enemy.value * rewardMultiplier);
-        const scoreReward = Math.round(enemy.scoreValue * rewardMultiplier);
+        // Se è una collisione, non diamo ricompense ma solo effetti visivi
+        if (isCollision) {
+            // Solo effetti visivi per la morte
+            this.explosions.push(new Explosion(enemy.x, enemy.y, enemy.color));
+            this.soundManager.play('explosion');
+            // Aggiorna il conteggio dei nemici per la wave
+            if (this.currentWave) {
+                this.currentWave.onEnemyDefeated();
+            }
+            return;
+        }
+
+        // Normal rewards solo per uccisioni con proiettili
+        const creditReward = Math.round(enemy.value);
+        const scoreReward = Math.round(enemy.scoreValue);
 
         // Add visual effects
         this.explosions.push(new Explosion(enemy.x, enemy.y, enemy.color));
-        
+
         // Add floating score text
         this.floatingTexts.push(new FloatingText(
             enemy.x,
             enemy.y - 20,
             `+${creditReward}💰`,
-            isCollision ? 'collision' : 'reward'
+            'reward'
         ));
 
         // Update game state
@@ -513,7 +563,7 @@ class Game {
         if (this.currentWave) {
             this.currentWave.onEnemyDefeated();
         }
-        
+
         // Add kill count for auto-fire charge
         if (!isCollision) {
             this.station.addKill();
@@ -525,7 +575,7 @@ class Game {
         const damageDealt = Math.round(this.station.projectileDamage);
         this.floatingTexts.push(new FloatingText(
             enemy.x,
-            enemy.y, 
+            enemy.y,
             damageDealt.toString(),
             'damage'
         ));
@@ -535,7 +585,7 @@ class Game {
             // Normal rewards for projectile kills
             this.handleEnemyDeath(enemy, false);
         }
-        
+
         this.comboCounter++;
         this.comboTimer = 0;
         if (this.comboCounter % GAME_CONFIG.COMBO_THRESHOLD === 0) {
@@ -559,11 +609,21 @@ class Game {
     }
 
     handleGameOver() {
-        this.soundManager.play('fail'); // Add this line at the start of handleGameOver
-        this.showGameOverPopup(); // Aggiungi questa chiamata
+        this.soundManager.play('fail');
+        this.paused = true;
         
-        // Sposta la logica di reset in un metodo separato
-        this.resetGame();
+        const gameStats = {
+            score: this.state.score,
+            time: this.formatTime(this.state.gameTime),
+            enemiesKilled: this.state.enemiesKilled,
+            credits: this.state.credits,
+            wave: this.waveNumber // Add wave number
+        };
+
+        // Qui è la correzione: passiamo true come terzo parametro per indicare che è Game Over
+        new GameOverPopup(gameStats, () => {
+            this.resetGame();
+        }, true);  // <-- Aggiunto true per isGameOver
     }
 
     resetGame() {
@@ -575,7 +635,7 @@ class Game {
         this.comboCounter = 0;
         this.comboTimer = 0;
         this.bossSpawned = false;
-        
+
         this.soundManager.stopBackgroundMusic();
     }
 
@@ -610,7 +670,7 @@ class Game {
         this.explosions.forEach(explosion => explosion.draw(this.ctx));
         this.enemyProjectiles.forEach(projectile => projectile.draw(this.ctx));
         this.state.activePowerups.forEach(powerup => powerup.draw(this.ctx));
-        
+
         // Add debugging for floating texts
         this.floatingTexts.forEach((text, index) => {
             if (!text || typeof text.draw !== 'function') {
@@ -619,7 +679,7 @@ class Game {
                 text.draw(this.ctx);
             }
         });
-        
+
         // Draw auto-fire UI
         if (this.station) {
             // Draw kills progress bar
@@ -634,78 +694,118 @@ class Game {
 
             // Progress
             this.ctx.fillStyle = this.station.autoFireActive ? '#ff4444' : '#44ff44';
-            this.ctx.fillRect(barX, barY, 
-                (this.station.autoFireKills / this.station.autoFireKillsRequired) * barWidth, 
+            this.ctx.fillRect(barX, barY,
+                (this.station.autoFireKills / this.station.autoFireKillsRequired) * barWidth,
                 barHeight);
 
             // Text
             this.ctx.fillStyle = '#ffffff';
             this.ctx.font = '14px Arial';
             this.ctx.fillText(
-                `Auto-Fire Kills: ${this.station.autoFireKills}/${this.station.autoFireKillsRequired}`, 
-                barX  + 70  , barY - 5);
+                `Auto-Fire Kills: ${this.station.autoFireKills}/${this.station.autoFireKillsRequired}`,
+                barX + 70, barY - 5);
 
             // Duration bar when active
             if (this.station.autoFireActive) {
                 const durationX = barX;
                 const durationY = barY + 30;
-                
+
                 this.ctx.fillStyle = '#304060';
                 this.ctx.fillRect(durationX, durationY, barWidth, barHeight);
-                
+
                 this.ctx.fillStyle = '#ff4444';
-                this.ctx.fillRect(durationX, durationY, 
-                    (this.station.autoFireDuration / this.station.autoFireMaxDuration) * barWidth, 
+                this.ctx.fillRect(durationX, durationY,
+                    (this.station.autoFireDuration / this.station.autoFireMaxDuration) * barWidth,
                     barHeight);
-                
+
                 this.ctx.fillStyle = '#ffffff';
-                this.ctx.fillText('Duration', durationX, durationY - 5);
+                this.ctx.fillText('Duration', durationX + 70, durationY - 5);
+            }
+        }
+
+        // Aggiungi dopo il disegno di tutti gli altri elementi
+        this.drawSpatialGrid();
+    }
+
+    drawSpatialGrid() {
+        // Disegna le linee della griglia
+        this.ctx.strokeStyle = 'rgba(50, 50, 200, 0.2)';
+        this.ctx.lineWidth = 1;
+
+        // Linee verticali
+        for (let x = 0; x < this.width; x += this.spatialGrid.cellSize) {
+            this.ctx.beginPath();
+            this.ctx.moveTo(x, 0);
+            this.ctx.lineTo(x, this.height);
+            this.ctx.stroke();
+        }
+
+        // Linee orizzontali
+        for (let y = 0; y < this.height; y += this.spatialGrid.cellSize) {
+            this.ctx.beginPath();
+            this.ctx.moveTo(0, y);
+            this.ctx.lineTo(this.width, y);
+            this.ctx.stroke();
+        }
+
+        // Mostra il numero di entità in ogni cella
+        this.ctx.font = '12px Arial';
+        this.ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
+        
+        for (let col = 0; col < this.spatialGrid.cols; col++) {
+            for (let row = 0; row < this.spatialGrid.rows; row++) {
+                const cellCount = this.spatialGrid.grid[col][row].size;
+                if (cellCount > 0) {
+                    const x = col * this.spatialGrid.cellSize + 5;
+                    const y = row * this.spatialGrid.cellSize + 15;
+                    this.ctx.fillText(`${cellCount}`, x, y);
+                }
             }
         }
     }
 
     spawnEnemy() {
         if (this.enemies.length >= this.state.maxEnemies) return;
-        
+
         const currentTime = Date.now();
         if (currentTime - this.state.lastEnemySpawn < this.state.enemySpawnCooldown) return;
-        
+
         this.state.lastEnemySpawn = currentTime;
-        
+
         const spawnPoint = this.getRandomSpawnPoint();
         const enemyLevel = Math.max(1, Math.floor(this.state.gameTime / 30000));
-        
+
         // Choose enemy type based on game progress and randomness
         const enemyTypes = [Enemy];
         if (this.state.gameTime > 30000) enemyTypes.push(SpeedyEnemy);
         if (this.state.gameTime > 60000) enemyTypes.push(ShooterEnemy);
-        
+
         const EnemyType = enemyTypes[Math.floor(Math.random() * enemyTypes.length)];
-        
+
         // Pass entityManager when creating ShooterEnemy
-        const enemy = EnemyType === ShooterEnemy 
+        const enemy = EnemyType === ShooterEnemy
             ? new EnemyType(spawnPoint.x, spawnPoint.y, enemyLevel, this.entityManager)
             : new EnemyType(spawnPoint.x, spawnPoint.y, enemyLevel);
-        
+
         // Increase enemy strength over time
         enemy.health *= 1 + (this.state.gameTime / 60000);
         enemy.damage *= 1 + (this.state.gameTime / 60000);
         enemy.speed *= 1 + (this.state.gameTime / 60000);
-        
+
         this.enemies.push(enemy);
     }
 
     getRandomSpawnPoint() {
         const spawnSide = Math.floor(Math.random() * 4);
         let x, y;
-        
-        switch(spawnSide) {
+
+        switch (spawnSide) {
             case 0: x = Math.random() * this.width; y = -20; break;
             case 1: x = this.width + 20; y = Math.random() * this.height; break;
             case 2: x = Math.random() * this.width; y = this.height + 20; break;
             case 3: x = -20; y = Math.random() * this.height; break;
         }
-        
+
         return { x, y };
     }
 
@@ -718,13 +818,13 @@ class Game {
             x = Math.random() * (this.width - 100) + 50;
             y = Math.random() * (this.height - 100) + 50;
         } while (Math.hypot(x - this.station.x, y - this.station.y) < 200);
-        
+
         this.state.activePowerups.push(new PowerUp(x, y, type));
     }
 
     handlePowerUpCollection(powerup) {
         const info = powerup.powerupInfo;
-        
+
         this.station.addPowerUp(
             powerup.type,
             info.effect,
@@ -733,16 +833,16 @@ class Game {
             info.icon,
             info.remove
         );
-        
+
         // Visual effects
         this.explosions.push(new Explosion(powerup.x, powerup.y, info.color));
-        
+
         // Sound effects
         this.soundManager.play('coinEarn');
-        
+
         // Update score
         this.state.score += 500;
-        
+
         // Floating text
         this.floatingTexts.push(new FloatingText(
             powerup.x,
@@ -751,7 +851,7 @@ class Game {
             'powerup'
         ));
     }
-    
+
     updateComboSystem(deltaTime) {
         if (this.comboCounter > 0) {
             this.comboTimer += deltaTime;
@@ -779,7 +879,7 @@ class Game {
         this.waveNumber++;
         this.currentWave = new Wave(this.waveNumber);
         this.waveTimer = 0;
-        
+
         // Show wave announcement
         this.floatingTexts.push(new FloatingText(
             this.width / 2,
@@ -794,7 +894,7 @@ class Game {
         let enemy;
 
         // Create the appropriate enemy type
-        switch(enemyData.type) {
+        switch (enemyData.type) {
             case 'speedy':
                 enemy = new SpeedyEnemy(spawnPoint.x, spawnPoint.y, this.waveNumber);
                 break;
@@ -822,24 +922,24 @@ class Game {
         explosions.forEach(exp => {
             setTimeout(() => {
                 this.explosions.push(new Explosion(exp.x, exp.y, exp.color, 2));
-                
+
                 // Apply effects to enemies
                 this.enemies = this.enemies.filter(enemy => {
                     const dx = enemy.x - exp.x;
                     const dy = enemy.y - exp.y;
                     const distance = Math.sqrt(dx * dx + dy * dy);
-                    
+
                     if (distance < 150) {
                         // Calcola il danno in base alla distanza
                         const damage = exp.damage * (1 - distance / 150);
                         enemy.health -= damage;
-                        
+
                         // Se il nemico muore per il danno dell'abilità
                         if (enemy.health <= 0) {
                             this.handleEnemyDeath(enemy, false);
                             return false; // Rimuove il nemico dalla lista
                         }
-                        
+
                         if (exp.pullForce) {
                             const angle = Math.atan2(this.station.y - enemy.y, this.station.x - enemy.x);
                             enemy.x += Math.cos(angle) * exp.pullForce;
@@ -864,6 +964,44 @@ class Game {
         this.autoFireEnabled = this.station.autoFireActive;
         toggleBtn.textContent = `Auto Fire: ${this.autoFireEnabled ? 'ON' : 'OFF'}`;
         toggleBtn.classList.toggle('active', this.autoFireEnabled);
+    }
+
+    showPausePopup() {
+        const gameStats = {
+            score: this.state.score,
+            time: this.formatTime(this.state.gameTime),
+            enemiesKilled: this.state.enemiesKilled,
+            credits: this.state.credits,
+            wave: this.waveNumber // Add wave number
+        };
+
+        new GameOverPopup(gameStats, () => {
+            this.paused = false;
+            document.getElementById('pauseButton').textContent = 'Pause';
+        });
+    }
+
+    setupSettingsButton() {
+        const settingsBtn = document.querySelector('.settings-btn');
+        settingsBtn.addEventListener('click', () => {
+            this.paused = true;
+            this.showSettingsPopup();
+        });
+    }
+
+    showSettingsPopup() {
+        const gameStats = {
+            score: this.state.score,
+            time: this.formatTime(this.state.gameTime),
+            enemiesKilled: this.state.enemiesKilled,
+            credits: this.state.credits,
+            wave: this.waveNumber // Add wave number
+        };
+
+        // Qui passiamo false perché è solo una pausa
+        new GameOverPopup(gameStats, () => {
+            this.paused = false;
+        }, false);  // <-- Esplicitamente false per la pausa
     }
 }
 window.onload = () => new Game();

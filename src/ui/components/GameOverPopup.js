@@ -1,93 +1,170 @@
 export class GameOverPopup {
-    constructor(gameStats, onRetry) {
-        this.gameStats = gameStats;
-        this.onRetry = onRetry;
-        this.element = this.createPopup();
-        document.body.appendChild(this.element);
+    constructor(stats, onClose, isGameOver = false) {
+        // Ensure stats has all required properties with defaults
+        this.stats = {
+            score: stats?.score || 0,
+            time: stats?.time || '00:00',
+            enemiesKilled: stats?.enemiesKilled || 0,
+            credits: stats?.credits || 0,
+            wave: stats?.wave || 1
+        };
+        this.createPopup(this.stats, onClose, isGameOver);
     }
 
-    createPopup() {
-        const popup = document.createElement('div');
-        popup.style.cssText = this.getPopupStyles();
-        popup.innerHTML = this.createStatsHTML();
+    createPopup(stats, onClose, isGameOver) {
+        const overlay = document.createElement('div');
+        overlay.className = 'popup-overlay';
+        
+        const content = document.createElement('div');
+        content.className = 'popup-content';
 
-        const retryButton = this.createRetryButton();
-        popup.appendChild(retryButton);
+        // Funzione per animare i numeri
+        const animateValue = (element, start, end, duration) => {
+            let startTimestamp = null;
+            const step = (timestamp) => {
+                if (!startTimestamp) startTimestamp = timestamp;
+                const progress = Math.min((timestamp - startTimestamp) / duration, 1);
+                element.textContent = Math.floor(progress * (end - start) + start);
+                if (progress < 1) {
+                    window.requestAnimationFrame(step);
+                }
+            };
+            window.requestAnimationFrame(step);
+        };
 
-        return popup;
-    }
+        // Modifica il contenuto per aggiungere le icone
+        const getIcon = (type) => {
+            const icons = {
+                score: '🎯',
+                time: '⏱️',
+                kills: '💥',
+                credits: '💎',
+                wave: '🌊'
+            };
+            return icons[type] || '';
+        };
 
-    getPopupStyles() {
-        return `
-            position: fixed;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            background: linear-gradient(45deg, #ff6b6b, #4ecdc4);
-            padding: 30px;
-            border-radius: 15px;
-            text-align: center;
-            box-shadow: 0 0 20px rgba(0,0,0,0.5);
-            z-index: 1000;
-            min-width: 300px;
-        `;
-    }
-
-    createStatsHTML() {
-        return `
-            <h2 style="color: white; font-size: 2.5em; margin-bottom: 20px; text-shadow: 2px 2px 4px rgba(0,0,0,0.3);">
-                Game Over!
-            </h2>
-            <div style="background: rgba(0,0,0,0.2); padding: 20px; border-radius: 10px; margin-bottom: 20px;">
-                <table style="width: 100%; color: white; font-size: 1.2em; text-align: left;">
-                    ${this.createStatsRows()}
-                </table>
+        const createStatItem = (value, label, type) => `
+            <div class="stat-item" data-type="${type}">
+                <div class="stat-icon">${getIcon(type)}</div>
+                <div class="stat-value" data-value="${value}">0</div>
+                <div class="stat-label">${label}</div>
             </div>
         `;
-    }
 
-    createStatsRows() {
-        const stats = [
-            { icon: '🎯', label: 'Final Score', value: this.gameStats.score },
-            { icon: '⏱️', label: 'Survival Time', value: this.gameStats.time },
-            { icon: '💀', label: 'Enemies Defeated', value: this.gameStats.enemiesKilled },
-            { icon: '💰', label: 'Credits Earned', value: this.gameStats.credits },
-            { icon: '⚡', label: 'Final Difficulty', value: `${this.gameStats.difficulty}x` }
-        ];
+        if (isGameOver) {
+            // Game Over popup
+            content.innerHTML = `
+                <div class="popup-header">
+                    <h2>Game Over</h2>
+                </div>
+                <div class="stats-grid">
+                    ${createStatItem(stats.score, 'Final Score', 'score')}
+                    ${createStatItem(stats.time, 'Survival Time', 'time')}
+                    ${createStatItem(stats.enemiesKilled, 'Total Kills', 'kills')}
+                    ${createStatItem(stats.credits, 'Credits Earned', 'credits')}
+                    ${createStatItem(stats.wave, 'Final Wave', 'wave')}
+                </div>
+                <button id="restartGame" class="popup-btn">⚔️ Play Again ⚔️</button>
+            `;
 
-        return stats.map(stat => `
-            <tr>
-                <td>${stat.icon} ${stat.label}:</td>
-                <td>${stat.value}</td>
-            </tr>
-        `).join('');
-    }
+            const restartBtn = content.querySelector('#restartGame');
+            restartBtn.addEventListener('click', () => {
+                window.location.reload();
+            });
+        } else {
+            // Pause popup
+            content.innerHTML = `
+                <div class="popup-header">
+                    <h2>Game Paused</h2>
+                </div>
+                <div class="stats-grid">
+                    <div class="stat-item">
+                        <div class="stat-value" data-value="${stats.score}">0</div>
+                        <div class="stat-label">Score</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-value" data-value="${stats.time}">0</div>
+                        <div class="stat-label">Time</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-value" data-value="${stats.enemiesKilled}">0</div>
+                        <div class="stat-label">Kills</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-value" data-value="${stats.credits}">0</div>
+                        <div class="stat-label">Credits</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-value" data-value="${stats.wave}">0</div>
+                        <div class="stat-label">Wave</div>
+                    </div>
+                </div>
+                <button id="resumeGame" class="popup-btn">Resume Game</button>
+                <button id="toggleSound" class="popup-btn">Sound Effects: ${localStorage.getItem('soundEnabled') !== 'false' ? 'ON' : 'OFF'}</button>
+                <button id="toggleMusic" class="popup-btn">Music: ${localStorage.getItem('musicEnabled') !== 'false' ? 'ON' : 'OFF'}</button>
+            `;
 
-    createRetryButton() {
-        const button = document.createElement('button');
-        button.textContent = 'Play Again';
-        button.style.cssText = `
-            background: #ffd93d;
-            border: none;
-            padding: 15px 30px;
-            border-radius: 25px;
-            font-size: 1.2em;
-            cursor: pointer;
-            transition: transform 0.2s;
-            &:hover {
-                transform: scale(1.1);
-            }
-        `;
+            // Aggiungi event listener per il pulsante Resume
+            const resumeBtn = content.querySelector('#resumeGame');
+            resumeBtn.addEventListener('click', () => {
+                this.close();
+                if (onClose) onClose();
+            });
 
-        button.addEventListener('click', () => {
-            this.close();
-            this.onRetry();
+            // Event listeners
+            const toggleSoundBtn = content.querySelector('#toggleSound');
+            const toggleMusicBtn = content.querySelector('#toggleMusic');
+
+            toggleSoundBtn.addEventListener('click', () => {
+                const soundEnabled = localStorage.getItem('soundEnabled') !== 'false';
+                localStorage.setItem('soundEnabled', !soundEnabled);
+                toggleSoundBtn.textContent = `Sound Effects: ${!soundEnabled ? 'ON' : 'OFF'}`;
+            });
+
+            toggleMusicBtn?.addEventListener('click', () => {
+                const musicEnabled = localStorage.getItem('musicEnabled') !== 'false';
+                localStorage.setItem('musicEnabled', !musicEnabled);
+                toggleMusicBtn.textContent = `Music: ${!musicEnabled ? 'ON' : 'OFF'}`;
+                const bgMusic = document.getElementById('background');
+                if (bgMusic) {
+                    !musicEnabled ? bgMusic.play().catch(() => {}) : bgMusic.pause();
+                }
+            });
+        }
+
+        overlay.appendChild(content);
+        document.body.appendChild(overlay);
+
+        // Dopo che il popup è stato aggiunto al DOM, anima i valori
+        requestAnimationFrame(() => {
+            overlay.classList.add('active');
+            const statValues = content.querySelectorAll('.stat-value[data-value]');
+            statValues.forEach(el => {
+                const value = parseInt(el.dataset.value);
+                animateValue(el, 0, value, 1000);
+            });
         });
 
-        return button;
+        // Improve audio initialization
+        const playHoverSound = () => {
+            if (localStorage.getItem('soundEnabled') === 'false') return;
+            
+            const hoverSound = new Audio('./assets/hover.wav');
+            hoverSound.volume = 0.2;
+            hoverSound.play().catch(err => console.warn('Could not play hover sound'));
+        };
+
+        // Add sound effects to buttons
+        content.querySelectorAll('.popup-btn').forEach(btn => {
+            btn.addEventListener('mouseenter', playHoverSound);
+        });
+
+        this.element = overlay;
     }
 
     close() {
-        document.body.removeChild(this.element);
+        this.element.classList.remove('active');
+        setTimeout(() => this.element.remove(), 300);
     }
 }

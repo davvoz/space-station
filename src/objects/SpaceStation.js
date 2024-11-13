@@ -67,6 +67,9 @@ export class SpaceStation extends GameObject {
         this.baseDamage = this.projectileDamage;
         this.baseTurrets = this.turrets;
         this.bonusShield = false;
+
+        // Add autoFireTimer to the constructor
+        this.autoFireTimer = 0;
     }
 
     applyInvincibility(duration) {
@@ -76,41 +79,48 @@ export class SpaceStation extends GameObject {
     }
 
     update(currentTime) {
+        const deltaTime = currentTime - this.lastUpdate;
+        
+        this.updateMovement();
+        this.updateInvincibility(deltaTime);
+        this.updateAbilities(deltaTime);
+        this.updatePowerUps(deltaTime);
+        
+        this.lastUpdate = currentTime;
+    }
+
+    updateMovement() {
         const keys = this.getKeys();
         
-        
-        // Calculate movement based on arrow keys
-        this.dx = 0;
-        this.dy = 0;
-        if (keys.ArrowLeft) this.dx = -this.speed;
-        if (keys.ArrowRight) this.dx = this.speed;
-        if (keys.ArrowUp) this.dy = -this.speed;
-        if (keys.ArrowDown) this.dy = this.speed;
+        // Calculate movement vector
+        this.dx = (keys.ArrowRight ? this.speed : 0) - (keys.ArrowLeft ? this.speed : 0);
+        this.dy = (keys.ArrowDown ? this.speed : 0) - (keys.ArrowUp ? this.speed : 0);
 
         // Apply movement
-        this.x += this.dx;
-        this.y += this.dy;
+        this.x = Math.max(this.radius, Math.min(this.screenWidth - this.radius, this.x + this.dx));
+        this.y = Math.max(this.radius, Math.min(this.screenHeight - this.radius, this.y + this.dy));
+    }
 
-        // Keep within screen bounds
-        this.x = Math.max(this.radius, Math.min(this.screenWidth - this.radius, this.x));
-        this.y = Math.max(this.radius, Math.min(this.screenHeight - this.radius, this.y));
+    updateInvincibility(deltaTime) {
+        if (!this.invincible) return;
+        
+        this.invincibilityDuration -= deltaTime;
+        this.invincibilityAlpha = Math.max(0, this.invincibilityDuration / this.invincibilityMaxDuration);
 
-        const deltaTime = currentTime - this.lastUpdate;
-
-        if (this.invincible) {
-            this.invincibilityDuration -= deltaTime;
-
-            // Calculate alpha based on remaining duration (0 to 1)
-            this.invincibilityAlpha = Math.max(0, this.invincibilityDuration / this.invincibilityMaxDuration);
-
-            if (this.invincibilityDuration <= 0) {
-                this.invincible = false;
-                this.invincibilityDuration = 0;
-                this.invincibilityAlpha = 0;
-            }
+        if (this.invincibilityDuration <= 0) {
+            this.invincible = false;
+            this.invincibilityDuration = 0;
+            this.invincibilityAlpha = 0;
         }
+    }
 
-        // Update auto-fire
+    updateAbilities(deltaTime) {
+        this.updateAutoFire(deltaTime);
+        this.updateNovaAndVortex(deltaTime);
+        this.updateAbilityCharge(deltaTime);
+    }
+
+    updateAutoFire(deltaTime) {
         if (this.autoFireActive) {
             this.autoFireDuration = Math.max(0, this.autoFireDuration - deltaTime);
             if (this.autoFireDuration <= 0) {
@@ -121,13 +131,14 @@ export class SpaceStation extends GameObject {
         } else if (this.autoFireCooldown > 0) {
             this.autoFireCooldown = Math.max(0, this.autoFireCooldown - deltaTime);
             if (this.autoFireCooldown === 0) {
-                this.autoFireCharge = 100; // Ricarica completa dopo il cooldown
+                this.autoFireCharge = 100;
             }
         } else {
-            this.autoFireCharge = 100; // Mantieni carico quando non in uso
+            this.autoFireCharge = 100;
         }
+    }
 
-        // Update ability states
+    updateNovaAndVortex(deltaTime) {
         if (this.novaActive) {
             this.novaDuration -= deltaTime;
             if (this.novaDuration <= 0) {
@@ -141,45 +152,31 @@ export class SpaceStation extends GameObject {
                 this.deactivateAbility('vortex');
             }
         }
+    }
 
+    updateAbilityCharge(deltaTime) {
         if (!this.novaActive && !this.vortexActive) {
             if (this.abilityCooldown > 0) {
                 this.abilityCooldown = Math.max(0, this.abilityCooldown - deltaTime);
             } else if (this.abilityCharge < this.abilityMaxCharge) {
                 this.abilityCharge = Math.min(
                     this.abilityMaxCharge,
-                    this.abilityCharge + (this.abilityChargeRate * deltaTime / 500) // Faster charge rate
+                    this.abilityCharge + (this.abilityChargeRate * deltaTime / 500)
                 );
             }
         }
 
-        // Update auto-fire cooldown
-        if (this.autoFireCooldown > 0) {
-            this.autoFireCooldown = Math.max(0, this.autoFireCooldown - 16.67); // Roughly 60 FPS
-        }
-
-        // Charge super ability over time
         if (this.superAbilityCharge < this.superAbilityMaxCharge) {
-            this.superAbilityCharge += 0.1; // Adjust charge rate as needed
+            this.superAbilityCharge += 0.1;
         }
+    }
 
-        // Update power-ups
+    updatePowerUps(deltaTime) {
         for (const [type, powerUp] of this.activePowerUps.entries()) {
             powerUp.remainingTime -= deltaTime;
             if (powerUp.remainingTime <= 0) {
                 powerUp.remove(this);
                 this.activePowerUps.delete(type);
-            }
-        }
-
-        this.lastUpdate = currentTime;
-    }
-
-    updateAutoFire(waveNumber) {
-        if (this.autoFireActive) {
-            this.autoFireDuration = Math.max(0, this.autoFireDuration - 16.67);
-            if (this.autoFireDuration <= 0) {
-                this.autoFireActive = false;
             }
         }
     }
@@ -210,7 +207,18 @@ export class SpaceStation extends GameObject {
     }
 
     draw(ctx) {
-        // Shield effect
+        this.drawShield(ctx);
+        this.drawInvincibility(ctx);
+        this.drawMainBody(ctx);
+        this.drawInnerDetails(ctx);
+        this.drawDockingPorts(ctx);
+        this.drawTurrets(ctx);
+        this.drawCentralAntenna(ctx);
+        this.drawHealthBar(ctx);
+        this.drawPowerUpStatusBars(ctx);
+    }
+
+    drawShield(ctx) {
         if (this.shield > 0) {
             const gradient = ctx.createRadialGradient(this.x, this.y, this.radius, this.x, this.y, this.radius + 20);
             gradient.addColorStop(0, `rgba(100, 200, 255, 0.1)`);
@@ -221,8 +229,9 @@ export class SpaceStation extends GameObject {
             ctx.fillStyle = gradient;
             ctx.fill();
         }
+    }
 
-        // Invincibility effect
+    drawInvincibility(ctx) {
         if (this.invincible) {
             ctx.beginPath();
             ctx.arc(this.x, this.y, this.radius + 30, 0, Math.PI * 2);
@@ -237,8 +246,9 @@ export class SpaceStation extends GameObject {
             ctx.lineWidth = 3;
             ctx.stroke();
         }
+    }
 
-        // Main station body
+    drawMainBody(ctx) {
         ctx.beginPath();
         ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
         const mainGradient = ctx.createRadialGradient(this.x - this.radius / 3, this.y - this.radius / 3, 0, this.x, this.y, this.radius);
@@ -249,15 +259,17 @@ export class SpaceStation extends GameObject {
         ctx.strokeStyle = '#80e0ff';
         ctx.lineWidth = 2;
         ctx.stroke();
+    }
 
-        // Inner details
+    drawInnerDetails(ctx) {
         ctx.beginPath();
         ctx.arc(this.x, this.y, this.radius * 0.7, 0, Math.PI * 2);
         ctx.strokeStyle = '#80e0ff';
         ctx.lineWidth = 1;
         ctx.stroke();
+    }
 
-        // Docking ports
+    drawDockingPorts(ctx) {
         for (let i = 0; i < 4; i++) {
             const angle = (i / 4) * Math.PI * 2;
             const px = this.x + Math.cos(angle) * this.radius;
@@ -270,8 +282,9 @@ export class SpaceStation extends GameObject {
             ctx.strokeStyle = '#80e0ff';
             ctx.stroke();
         }
+    }
 
-        // Turrets
+    drawTurrets(ctx) {
         for (let i = 0; i < this.turrets; i++) {
             const angle = (i / this.turrets) * Math.PI * 2 + this.turretAngle;
             const tx = this.x + Math.cos(angle) * this.radius;
@@ -297,8 +310,9 @@ export class SpaceStation extends GameObject {
             ctx.lineWidth = 3;
             ctx.stroke();
         }
+    }
 
-        // Central antenna
+    drawCentralAntenna(ctx) {
         ctx.beginPath();
         ctx.moveTo(this.x, this.y - this.radius * 0.7);
         ctx.lineTo(this.x, this.y + this.radius * 0.7);
@@ -307,8 +321,9 @@ export class SpaceStation extends GameObject {
         ctx.strokeStyle = '#80e0ff';
         ctx.lineWidth = 1;
         ctx.stroke();
+    }
 
-        // Health bar with better styling
+    drawHealthBar(ctx) {
         const healthBarWidth = 50;
         const healthBarHeight = 6;
         const healthPercentage = this.health / this.maxHealth;
@@ -328,8 +343,9 @@ export class SpaceStation extends GameObject {
         ctx.fillStyle = healthGradient;
         ctx.fillRect(this.x - healthBarWidth / 2, this.y + this.radius + 10,
             healthBarWidth * healthPercentage, healthBarHeight);
+    }
 
-        // Draw power-up status bars
+    drawPowerUpStatusBars(ctx) {
         let offsetY = -50;
         for (const [type, powerUp] of this.activePowerUps.entries()) {
             const progress = powerUp.remainingTime / powerUp.duration;
@@ -338,15 +354,15 @@ export class SpaceStation extends GameObject {
 
             // Draw bar background
             ctx.fillStyle = '#304060';
-            ctx.fillRect(this.x - barWidth/2, this.y + offsetY, barWidth, barHeight);
+            ctx.fillRect(this.x - barWidth / 2, this.y + offsetY, barWidth, barHeight);
 
             // Draw progress bar
             ctx.fillStyle = powerUp.color;
-            ctx.fillRect(this.x - barWidth/2, this.y + offsetY, barWidth * progress, barHeight);
+            ctx.fillRect(this.x - barWidth / 2, this.y + offsetY, barWidth * progress, barHeight);
 
             // Draw icon
             ctx.font = '12px Arial';
-            ctx.fillText(powerUp.icon, this.x - barWidth/2 - 15, this.y + offsetY + barHeight);
+            ctx.fillText(powerUp.icon, this.x - barWidth / 2 - 15, this.y + offsetY + barHeight);
 
             offsetY += 10;
         }
@@ -380,10 +396,11 @@ export class SpaceStation extends GameObject {
     }
 
     autoFire() {
-        //deve sparare un proiettile ogni ottavo di secondo
         if (this.autoFireActive) {
-            this.autoFireTimer += 16.67; // 60 FPS
-            if (this.autoFireTimer >= 125) {
+            this.autoFireTimer += 16.67; // Assuming 60 FPS
+            // Convert fireRate to milliseconds (fireRate is shots per second)
+            const fireInterval = 1000 / this.fireRate;
+            if (this.autoFireTimer >= fireInterval) {
                 this.autoFireTimer = 0;
                 return true;
             }
@@ -514,7 +531,8 @@ export class SpaceStation extends GameObject {
     activateAutoFire(waveNumber) {
         if (this.autoFireKills >= this.autoFireKillsRequired && !this.autoFireActive) {
             this.autoFireActive = true;
-            this.autoFireDuration = waveNumber * 5000; // 5 seconds per wave
+            // Modifica qui: base 5 secondi + 1 secondo per wave, massimo 15 secondi
+            this.autoFireDuration = Math.min(15000, 5000 + waveNumber * 1000);
             this.autoFireMaxDuration = this.autoFireDuration;
             this.autoFireKills = 0; // Reset kills after activation
             return true;

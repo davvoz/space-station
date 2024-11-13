@@ -1,4 +1,3 @@
-
 import { GameStats } from '../utils/GameStats.js';
 import { UpgradeBars } from '../utils/UpgradeBars.js';
 import { AbilityButtons } from '../utils/AbilityButtons.js';
@@ -48,7 +47,7 @@ export class GameRenderer {
         this.timer.draw(game.state.gameTime);
         
         const gameStats = new GameStats(this.ctx, this.width);
-        gameStats.draw(game.state, game.station);
+        gameStats.draw(game.state);
 
         const upgradeBars = new UpgradeBars(this.ctx, this.width, this.upgradeColors);
         upgradeBars.draw(
