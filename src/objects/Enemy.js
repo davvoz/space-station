@@ -143,6 +143,14 @@ export class Enemy extends GameObject {
     }
 
     draw(ctx) {
+        // Disegna l'etichetta del tipo
+        ctx.save();
+        ctx.font = '12px Arial';
+        ctx.fillStyle = 'white';
+        ctx.textAlign = 'center';
+        ctx.fillText(this.type || 'basic', this.x, this.y - this.radius - 10);
+        ctx.restore();
+
         this.drawBody(ctx);
         this.drawHealthBar(ctx);
     }

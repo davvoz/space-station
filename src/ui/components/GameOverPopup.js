@@ -13,7 +13,7 @@ export class GameOverPopup {
 
     createPopup(stats, onClose, isGameOver) {
         const overlay = document.createElement('div');
-        overlay.className = 'popup-overlay';
+        overlay.className = 'popup-overlay active'; // Aggiungi active immediatamente
         
         const content = document.createElement('div');
         content.className = 'popup-content';
@@ -105,10 +105,10 @@ export class GameOverPopup {
                 <button id="toggleMusic" class="popup-btn">Music: ${localStorage.getItem('musicEnabled') !== 'false' ? 'ON' : 'OFF'}</button>
             `;
 
-            // Aggiungi event listener per il pulsante Resume
+            // Versione semplificata della gestione del click
             const resumeBtn = content.querySelector('#resumeGame');
             resumeBtn.addEventListener('click', () => {
-                this.close();
+                document.body.removeChild(overlay); // Rimuovi immediatamente
                 if (onClose) onClose();
             });
 
@@ -136,16 +136,13 @@ export class GameOverPopup {
         overlay.appendChild(content);
         document.body.appendChild(overlay);
 
-        // Dopo che il popup è stato aggiunto al DOM, anima i valori
-        requestAnimationFrame(() => {
-            overlay.classList.add('active');
-            const statValues = content.querySelectorAll('.stat-value[data-value]');
-            statValues.forEach(el => {
-                const value = parseInt(el.dataset.value);
-                animateValue(el, 0, value, 1000);
-            });
+        // Rimuovi l'animazione ritardata
+        const statValues = content.querySelectorAll('.stat-value[data-value]');
+        statValues.forEach(el => {
+            const value = parseInt(el.dataset.value);
+            animateValue(el, 0, value, 1000);
         });
-
+a
         // Improve audio initialization
         const playHoverSound = () => {
             if (localStorage.getItem('soundEnabled') === 'false') return;
@@ -161,10 +158,5 @@ export class GameOverPopup {
         });
 
         this.element = overlay;
-    }
-
-    close() {
-        this.element.classList.remove('active');
-        setTimeout(() => this.element.remove(), 300);
     }
 }

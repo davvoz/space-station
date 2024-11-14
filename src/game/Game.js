@@ -16,7 +16,7 @@ import { GameOverPopup } from '../ui/components/GameOverPopup.js';
 import { SoundManager } from './managers/SoundManager.js';
 import { SpatialGrid } from '../utils/SpatialGrid.js';
 
-class Game {
+export class Game {
     constructor() {
         this.initializeCanvas();
         this.state = new GameState();
@@ -52,7 +52,11 @@ class Game {
             enemies: this.enemies,
             projectiles: this.projectiles,
             enemyProjectiles: this.enemyProjectiles,
-            station: this.station
+            station: this.station,
+            addEnemyProjectile: (projectile) => {
+                console.log('Adding enemy projectile:', projectile);
+                this.enemyProjectiles.push(projectile);
+            }
         };
 
         this.paused = false; // Add pause state
@@ -68,6 +72,26 @@ class Game {
 
         // Aggiungi la griglia spaziale
         this.spatialGrid = new SpatialGrid(this.width, this.height, 100); // Celle 100x100
+
+        this.targetDelta = 1000 / 60; // Target 60 FPS
+        this.maxFrameSkip = 5; // Maximum number of frames to skip
+        this.accumulator = 0;
+
+        // Add reward system properties
+        this.rewardSystem = {
+            comboMultiplier: 1,
+            consecutiveKills: 0,
+            comboTimer: 0,
+            comboTimeout: 2000, // 2 seconds to maintain combo
+            waveRewards: {
+                energyBonus: {
+                    interval: 3, // Changed from 7 to 3 waves
+                    multiplier: 1.0,
+                    bonusBars: 0 // Track number of bonus bars
+                }
+            },
+            lastKillTime: 0
+        };
     }
 
     initializeCanvas() {
@@ -231,10 +255,21 @@ class Game {
             return;
         }
 
-        const deltaTime = Math.min(timestamp - this.lastTime, GAME_CONFIG.MAX_DELTA_TIME);
+        const frameTime = timestamp - this.lastTime;
         this.lastTime = timestamp;
 
-        this.update(deltaTime);
+        // Add frame time to accumulator
+        this.accumulator += Math.min(frameTime, 250); // Cap at 250ms to prevent spiral of death
+
+        // Update game state in fixed time steps
+        let skippedFrames = 0;
+        while (this.accumulator >= this.targetDelta && skippedFrames < this.maxFrameSkip) {
+            this.update(this.targetDelta);
+            this.accumulator -= this.targetDelta;
+            skippedFrames++;
+        }
+
+        // Draw the game state
         this.draw();
 
         window.requestAnimationFrame(this.gameLoop.bind(this));
@@ -266,10 +301,29 @@ class Game {
 
         this.enemyProjectiles = this.enemyProjectiles.filter(projectile => {
             if (projectile.collidesWith(this.station) && this.state.invulnerableTime <= 0) {
+                // Effetti sonori e visivi per l'impatto
+                this.soundManager.play('hit');
+                
+                // Calcola il danno basato sullo scudo
+                const damage = projectile.damage;
+                const actualDamage = this.station.shield > 0 ? Math.floor(damage / 2) : damage;
+
+                // Mostra il danno come floating text con indicazione dello shield
+                this.floatingTexts.push(new FloatingText(
+                    this.station.x,
+                    this.station.y - 30,
+                    `-${actualDamage} ${this.station.shield > 0 ? '🛡️' : ''}`,
+                    'damage'
+                ));
+
+                // Attiva l'effetto di danno sulla stazione
+                this.station.activateDamageEffect();
+
+                // Applica il danno
                 if (this.station.shield > 0) {
-                    this.station.shield = Math.max(0, this.station.shield - projectile.damage);
+                    this.station.shield = Math.max(0, this.station.shield - actualDamage);
                 } else {
-                    this.station.health -= projectile.damage;
+                    this.station.health -= actualDamage;
                 }
                 return false;
             }
@@ -384,6 +438,22 @@ class Game {
 
         // Play celebration sound
         this.soundManager.play('combo');
+
+        // Check for energy bonus reward every 3 waves
+        if (this.waveNumber % this.rewardSystem.waveRewards.energyBonus.interval === 0) {
+            const bonusAmount = this.station.baseHealth; // Use baseHealth value
+            this.station.maxHealth += bonusAmount;
+            this.station.health = this.station.maxHealth; // Fill health when getting new bar
+            this.rewardSystem.waveRewards.energyBonus.bonusBars++;
+            
+            this.floatingTexts.push(new FloatingText(
+                this.width / 2,
+                this.height / 2 + 50,
+                `NEW ENERGY BAR UNLOCKED! +${bonusAmount}!`,
+                'upgrade'
+             ));
+            this.soundManager.play('powerup');
+        }
     }
 
     updateGameState(deltaTime) {
@@ -460,6 +530,7 @@ class Game {
                 // Danno base aumentato esponenzialmente con la wave
                 const baseDamage = 10;
                 const waveDamage = Math.floor(baseDamage * Math.pow(1.2, this.waveNumber));
+                const actualDamage = this.station.shield > 0 ? Math.floor(waveDamage / 2) : waveDamage;
                 
                 // Calcolo crediti rubati con scaling più aggressivo
                 const baseSteal = 20;
@@ -470,9 +541,9 @@ class Game {
 
                 // Applica il danno
                 if (this.station.shield > 0) {
-                    this.station.shield = Math.max(0, this.station.shield - waveDamage);
+                    this.station.shield = Math.max(0, this.station.shield - actualDamage);
                 } else {
-                    this.station.health -= waveDamage;
+                    this.station.health -= actualDamage;
                 }
 
                 // Sottrai i crediti solo se ne abbiamo
@@ -486,11 +557,11 @@ class Game {
                     ));
                 }
 
-                // Mostra il danno
+                // Mostra il danno con indicazione dello shield
                 this.floatingTexts.push(new FloatingText(
                     this.station.x,
                     this.station.y - 30,
-                    `-${waveDamage}❤️`,
+                    `-${actualDamage}${this.station.shield > 0 ? '🛡️' : ''}❤️`,
                     'damage'
                 ));
 
@@ -535,9 +606,34 @@ class Game {
             return;
         }
 
-        // Normal rewards solo per uccisioni con proiettili
-        const creditReward = Math.round(enemy.value);
-        const scoreReward = Math.round(enemy.scoreValue);
+        const now = Date.now();
+        
+        // Update combo system
+        if (now - this.rewardSystem.lastKillTime < this.rewardSystem.comboTimeout) {
+            this.rewardSystem.consecutiveKills++;
+            this.rewardSystem.comboMultiplier = Math.min(5, 1 + Math.floor(this.rewardSystem.consecutiveKills / 5) * 0.5);
+            
+            if (this.rewardSystem.consecutiveKills % 5 === 0) {
+                this.floatingTexts.push(new FloatingText(
+                    enemy.x,
+                    enemy.y - 40,
+                    `COMBO x${this.rewardSystem.comboMultiplier.toFixed(1)}!`,
+                    'combo'
+                ));
+                this.soundManager.play('combo');
+            }
+        } else {
+            this.rewardSystem.consecutiveKills = 1;
+            this.rewardSystem.comboMultiplier = 1;
+        }
+        
+        this.rewardSystem.lastKillTime = now;
+
+        // Apply combo multiplier to rewards
+        const baseCredit = Math.round(enemy.value);
+        const baseScore = Math.round(enemy.scoreValue);
+        const creditReward = Math.round(baseCredit * this.rewardSystem.comboMultiplier);
+        const scoreReward = Math.round(baseScore * this.rewardSystem.comboMultiplier);
 
         // Add visual effects
         this.explosions.push(new Explosion(enemy.x, enemy.y, enemy.color));
@@ -723,8 +819,92 @@ class Game {
             }
         }
 
+        // Draw combo meter if active
+        if (this.rewardSystem.comboMultiplier > 1) {
+            const comboBarX = this.width - 180;
+            const comboBarY = this.height / 2 + 30; // Position below other bars
+            const barWidth = 150;
+            const barHeight = 15;
+
+            // Background
+            this.ctx.fillStyle = '#304060';
+            this.ctx.fillRect(comboBarX, comboBarY, barWidth, barHeight);
+
+            // Combo timer progress
+            const comboProgress = Math.max(0, 1 - ((Date.now() - this.rewardSystem.lastKillTime) / this.rewardSystem.comboTimeout));
+            this.ctx.fillStyle = `hsl(${120 * comboProgress}, 100%, 50%)`;
+            this.ctx.fillRect(comboBarX, comboBarY, barWidth * comboProgress, barHeight);
+
+            // Combo text
+            this.ctx.fillStyle = '#ffffff';
+            this.ctx.font = '14px Arial';
+            this.ctx.fillText(
+                `Combo x${this.rewardSystem.comboMultiplier.toFixed(1)}`,
+                comboBarX + 70, comboBarY - 5
+            );
+        }
+
+        // Draw base health bar and bonus health bars
+        if (this.station) {
+            const barX = this.x - 25;
+            const baseBarY = this.y + this.radius + 10;
+            const barWidth = 50;
+            const barHeight = 6;
+            const barSpacing = 4;
+
+            // Draw base health bar (first bar)
+            this.drawHealthBar(this.ctx, barX, baseBarY, barWidth, barHeight, 
+                Math.min(this.station.health, this.station.baseHealth), 
+                this.station.baseHealth);
+
+            // Draw bonus health bars
+            let remainingHealth = Math.max(0, this.station.health - this.station.baseHealth);
+            
+            for (let i = 0; i < Math.floor((this.station.maxHealth - this.station.baseHealth) / this.station.baseHealth); i++) {
+                const bonusBarY = baseBarY + (barHeight + barSpacing) * (i + 1);
+                const segmentHealth = Math.min(this.station.baseHealth, remainingHealth);
+                
+                // Solo se c'è salute rimanente per questa barra
+                if (segmentHealth > 0) {
+                    this.drawHealthBar(
+                        this.ctx, 
+                        barX, 
+                        bonusBarY, 
+                        barWidth, 
+                        barHeight, 
+                        segmentHealth,
+                        this.station.baseHealth,
+                        `hsl(${120 + i * 30}, 100%, 50%)`
+                    );
+                } else {
+                    // Disegna barra vuota
+                    this.drawHealthBar(
+                        this.ctx, 
+                        barX, 
+                        bonusBarY, 
+                        barWidth, 
+                        barHeight, 
+                        0,
+                        this.station.baseHealth,
+                        `hsl(${120 + i * 30}, 100%, 50%)`
+                    );
+                }
+                
+                remainingHealth = Math.max(0, remainingHealth - this.station.baseHealth);
+            }
+        }
+
         // Aggiungi dopo il disegno di tutti gli altri elementi
         this.drawSpatialGrid();
+
+        // Assicurati che i proiettili nemici vengano disegnati
+        if (this.enemyProjectiles && this.enemyProjectiles.length > 0) {
+            this.enemyProjectiles.forEach(projectile => {
+                if (projectile && typeof projectile.draw === 'function') {
+                    projectile.draw(this.ctx);
+                }
+            });
+        }
     }
 
     drawSpatialGrid() {
@@ -893,13 +1073,29 @@ class Game {
         const spawnPoint = this.getRandomSpawnPoint();
         let enemy;
 
-        // Create the appropriate enemy type
+        // Aggiungi logging per debug
+        console.log('Spawning enemy of type:', enemyData.type);
+        console.log('EntityManager status:', {
+            hasEnemyProjectiles: Array.isArray(this.entityManager.enemyProjectiles),
+            projectilesCount: this.enemyProjectiles.length
+        });
+
         switch (enemyData.type) {
             case 'speedy':
                 enemy = new SpeedyEnemy(spawnPoint.x, spawnPoint.y, this.waveNumber);
                 break;
             case 'shooter':
-                enemy = new ShooterEnemy(spawnPoint.x, spawnPoint.y, this.waveNumber, this.entityManager);
+                // Verifica che l'entityManager sia valido prima di crearlo
+                if (!this.entityManager || !Array.isArray(this.entityManager.enemyProjectiles)) {
+                    console.error('Invalid entityManager:', this.entityManager);
+                }
+                enemy = new ShooterEnemy(
+                    spawnPoint.x, 
+                    spawnPoint.y, 
+                    this.waveNumber,
+                    this.entityManager
+                );
+                console.log('Created ShooterEnemy with entityManager');
                 break;
             case 'boss':
                 enemy = new BossEnemy(spawnPoint.x, spawnPoint.y);
@@ -1002,6 +1198,17 @@ class Game {
         new GameOverPopup(gameStats, () => {
             this.paused = false;
         }, false);  // <-- Esplicitamente false per la pausa
+    }
+
+    drawHealthBar(ctx, x, y, width, height, current, max, color = '#00ff00') {
+        // Background
+        ctx.fillStyle = '#304060';
+        ctx.fillRect(x, y, width, height);
+
+        // Health fill
+        const healthPercentage = Math.min(1, current / max);
+        ctx.fillStyle = color;
+        ctx.fillRect(x, y, width * healthPercentage, height);
     }
 }
 window.onload = () => new Game();

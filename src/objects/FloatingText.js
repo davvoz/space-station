@@ -12,6 +12,20 @@ export class FloatingText {
             x: (Math.random() - 0.5) * 2,
             y: -2
         };
+
+        if (type === 'combo') {
+            this.color = '#ffff00';
+            this.size = '20px Arial';
+            this.duration = 1000;
+            this.velocity.y = -3;
+            this.velocity.x = 0;
+        } else if (type === 'upgrade') {
+            this.color = '#00ffff';
+            this.size = '24px Arial';
+            this.duration = 2000;
+            this.velocity.y = -2;
+            this.velocity.x = 0;
+        }
     }
 
     update() {

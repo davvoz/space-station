@@ -25,7 +25,13 @@ export class Wave {
             baseSpeed: 1,
             baseValue: 20,
             unlockWave: 3,
-            distribution: 0.2
+            distribution: 0.2,
+            projectileStats: {
+                baseDamage: 3,
+                baseSpeed: 8,
+                baseFireRate: 1500,
+                baseRange: 300
+            }
         },
         BOSS: {
             type: 'boss',
@@ -98,12 +104,24 @@ export class Wave {
     }
 
     calculateEnemyStats(config) {
-        return {
+        const stats = {
             health: config.baseHealth * Math.pow(1.1, this.waveNumber - 1),
             damage: config.baseDamage * Math.pow(1.05, this.waveNumber - 1),
             speed: Math.min(config.baseSpeed * 1.5, config.baseSpeed + (this.waveNumber * 0.1)),
             value: config.baseValue * Math.pow(1.1, this.waveNumber - 1)
         };
+
+        // Add projectile stats scaling for shooter enemies
+        if (config.type === 'shooter' && config.projectileStats) {
+            stats.projectile = {
+                damage: config.projectileStats.baseDamage * Math.pow(1.2, this.waveNumber - 1),
+                speed: config.projectileStats.baseSpeed + (this.waveNumber * 0.5),
+                fireRate: Math.max(500, config.projectileStats.baseFireRate - (this.waveNumber * 50)),
+                range: config.projectileStats.baseRange + (this.waveNumber * 10)
+            };
+        }
+
+        return stats;
     }
 
     getTypeDistribution(type) {

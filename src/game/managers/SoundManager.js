@@ -17,7 +17,8 @@ export class SoundManager {
             bossMusic: document.getElementById('bossMusic'),
             background: document.getElementById('background'),
             fail: document.getElementById('failSound'),
-            nova: document.getElementById('novaSound')
+            nova: document.getElementById('novaSound'),
+            hit: document.getElementById('explosionSound') // Aggiungi il suono di hit
         };
 
         Object.values(sounds).forEach(sound => {
@@ -25,6 +26,7 @@ export class SoundManager {
                 sound.volume = sound.id === 'background' ? 0.3 : GAME_CONFIG.SOUND_VOLUME;
             }
         });
+
 
         return sounds;
     }

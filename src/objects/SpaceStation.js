@@ -70,6 +70,11 @@ export class SpaceStation extends GameObject {
 
         // Add autoFireTimer to the constructor
         this.autoFireTimer = 0;
+
+        // Add damage effect properties
+        this.damageEffectDuration = 0;
+        this.maxDamageEffectDuration = 500; // 500ms di effetto rosso
+        this.baseHealth = 150; // Add base health value
     }
 
     applyInvincibility(duration) {
@@ -86,6 +91,11 @@ export class SpaceStation extends GameObject {
         this.updateAbilities(deltaTime);
         this.updatePowerUps(deltaTime);
         
+        // Aggiorna l'effetto di danno
+        if (this.damageEffectDuration > 0) {
+            this.damageEffectDuration = Math.max(0, this.damageEffectDuration - 16.67); // 60fps
+        }
+
         this.lastUpdate = currentTime;
     }
 
@@ -203,6 +213,7 @@ export class SpaceStation extends GameObject {
         } else {
             this.health -= amount;
         }
+        this.activateDamageEffect();
         return true; // Damage was applied
     }
 
@@ -216,6 +227,23 @@ export class SpaceStation extends GameObject {
         this.drawCentralAntenna(ctx);
         this.drawHealthBar(ctx);
         this.drawPowerUpStatusBars(ctx);
+
+        // Disegna l'effetto di danno se attivo
+        if (this.damageEffectDuration > 0) {
+            const alpha = (this.damageEffectDuration / this.maxDamageEffectDuration) * 0.5;
+            ctx.beginPath();
+            ctx.arc(this.x, this.y, this.radius + 5, 0, Math.PI * 2);
+            ctx.strokeStyle = `rgba(255, 0, 0, ${alpha})`;
+            ctx.lineWidth = 3;
+            ctx.stroke();
+            
+            // Secondo cerchio per un effetto più intenso
+            ctx.beginPath();
+            ctx.arc(this.x, this.y, this.radius + 2, 0, Math.PI * 2);
+            ctx.strokeStyle = `rgba(255, 0, 0, ${alpha * 1.5})`;
+            ctx.lineWidth = 2;
+            ctx.stroke();
+        }
     }
 
     drawShield(ctx) {
@@ -324,25 +352,39 @@ export class SpaceStation extends GameObject {
     }
 
     drawHealthBar(ctx) {
-        const healthBarWidth = 50;
-        const healthBarHeight = 6;
-        const healthPercentage = this.health / this.maxHealth;
+        const barWidth = 50;
+        const barHeight = 6;
+        const barSpacing = 4;
+        const baseY = this.y + this.radius + 10;
 
-        // Health bar background
+        // Draw base health bar (first 150 HP)
+        const baseHealthAmount = Math.min(this.health, this.baseHealth);
         ctx.fillStyle = '#304060';
-        ctx.fillRect(this.x - healthBarWidth / 2, this.y + this.radius + 10,
-            healthBarWidth, healthBarHeight);
+        ctx.fillRect(this.x - barWidth / 2, baseY, barWidth, barHeight);
+        ctx.fillStyle = '#00ff00';
+        ctx.fillRect(this.x - barWidth / 2, baseY, barWidth * (baseHealthAmount / this.baseHealth), barHeight);
 
-        // Health bar fill
-        const healthGradient = ctx.createLinearGradient(
-            this.x - healthBarWidth / 2, 0,
-            this.x + healthBarWidth / 2, 0
-        );
-        healthGradient.addColorStop(0, '#00ff00');
-        healthGradient.addColorStop(1, '#80ff80');
-        ctx.fillStyle = healthGradient;
-        ctx.fillRect(this.x - healthBarWidth / 2, this.y + this.radius + 10,
-            healthBarWidth * healthPercentage, healthBarHeight);
+        // Draw bonus health bars
+        let remainingHealth = Math.max(0, this.health - this.baseHealth);
+        for (let i = 0; i < Math.floor((this.maxHealth - this.baseHealth) / this.baseHealth); i++) {
+            const currentBarHealth = Math.min(remainingHealth, this.baseHealth);
+            const barY = baseY + (barHeight + barSpacing) * (i + 1);
+            
+            // Background
+            ctx.fillStyle = '#304060';
+            ctx.fillRect(this.x - barWidth / 2, barY, barWidth, barHeight);
+            
+            // Health fill with different colors for each bar
+            ctx.fillStyle = `hsl(${120 + i * 30}, 100%, 50%)`;
+            ctx.fillRect(
+                this.x - barWidth / 2, 
+                barY, 
+                barWidth * (currentBarHealth / this.baseHealth), 
+                barHeight
+            );
+            
+            remainingHealth -= this.baseHealth;
+        }
     }
 
     drawPowerUpStatusBars(ctx) {
@@ -538,5 +580,9 @@ export class SpaceStation extends GameObject {
             return true;
         }
         return false;
+    }
+
+    activateDamageEffect() {
+        this.damageEffectDuration = this.maxDamageEffectDuration;
     }
 }

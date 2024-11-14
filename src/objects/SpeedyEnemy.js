@@ -2,7 +2,7 @@ import { Enemy } from './Enemy.js';
 export class SpeedyEnemy extends Enemy {
     constructor(x, y, level = 1) {  // Add default level
         super(x, y, level);
-        this.type = 'speedy';
+        this.type = 'speedy'; // Aggiungi il tipo per l'etichetta
         this.radius = 12;
         this.health *= 0.7;
         this.maxHealth = this.health;
